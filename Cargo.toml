@@ -1,0 +1,10 @@
+[package]
+name = "trace2power"
+version = "0.0.1"
+edition = "2021"
+
+[dependencies]
+wellen = "0.9.14"
+rayon = "1.10.0"
+itertools = "0.13.0"
+clap = { version = "4.5.9", features = ["derive"] }
