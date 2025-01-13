@@ -5,7 +5,24 @@ use wellen::{Signal, SignalValue, TimeTableIdx};
 pub struct SignalStats {
     pub name: String,
     pub trans_count_doubled: u32,
+    pub clean_trans_count: u32,
+    pub glitch_trans_count: u32,
     pub high_time: u32,
+    pub low_time: u32,
+    pub x_time: u32,
+    pub z_time: u32,
+}
+
+impl SignalStats {
+    fn time_stat_of_value<'s>(&'s mut self, val: char) -> &'s mut u32 {
+        match val {
+            '1' => &mut self.high_time,
+            '0' => &mut self.low_time,
+            'x' => &mut self.x_time,
+            'z' => &mut self.z_time,
+            _ => panic!("Invalid value"),
+        }
+    }
 }
 
 fn val_at(ti: TimeTableIdx, sig: &Signal) -> (SignalValue, TimeTableIdx) {
@@ -32,7 +49,12 @@ pub fn calc_stats(sig: &Signal, name: String, time_end: wellen::Time) -> Vec<Sig
                 })
                 .as_ref(),
             trans_count_doubled: 0,
+            clean_trans_count: 0,
+            glitch_trans_count: 0,
             high_time: 0,
+            low_time: 0,
+            x_time: 0,
+            z_time: 0,
         })
     }
 
@@ -41,26 +63,34 @@ pub fn calc_stats(sig: &Signal, name: String, time_end: wellen::Time) -> Vec<Sig
         let val_str = val.to_bit_string().unwrap();
         let prev_val_str = prev_val.to_bit_string().unwrap();
         for (c, prev_c, i) in izip!(val_str.chars(), prev_val_str.chars(), 0..) {
-            if prev_c != c {
-                ss[i].trans_count_doubled +=
-                    if c == 'x' || c == 'z' || prev_c == 'x' || prev_c == 'z' {
-                        1
-                    } else {
-                        2
-                    };
+            match (prev_c, c) {
+                ('0', '1') | ('1', '0') => {
+                    ss[i].clean_trans_count += 1;
+                    ss[i].trans_count_doubled += 2;
+                }
+                (other @ _, 'x') | ('x', other @ _) => if other != 'x' {
+                    ss[i].trans_count_doubled += 1;
+                    ss[i].glitch_trans_count += 1;
+                }
+                (other @ _, 'z') | ('z', other @ _) => if other != 'z' {
+                    ss[i].trans_count_doubled += 1;
+                    if other == '0' {
+                        ss[i].clean_trans_count += 1;
+                    }
+                },
+                _ => if prev_c != c {
+                    panic!("Unknown transition {prev_c} -> {c}")
+                }
             }
-            if prev_c == '1' {
-                ss[i].high_time += ts - prev_ts;
-            }
+
+            *ss[i].time_stat_of_value(prev_c) += ts - prev_ts;
         }
         prev_ts = ts;
         prev_val = val;
     }
 
     for (prev_c, i) in izip!(prev_val.to_bit_string().unwrap().chars(), 0..) {
-        if prev_c == '1' {
-            ss[i].high_time += (time_end - (prev_ts as u64)) as u32;
-        }
+        *ss[i].time_stat_of_value(prev_c) += (time_end - (prev_ts as u64)) as u32;
     }
 
     return ss;
