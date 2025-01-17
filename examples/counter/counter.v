@@ -10,14 +10,14 @@ module counter(
   output reg pulse16
 );
   reg[4:0] cnt;
-  
+
   always @* begin
     pulse2 = cnt[0] == 1'd1;
     pulse4 = cnt[1:0] == 2'd3;
     pulse8 = cnt[2:0] == 3'd7;
     pulse16 = cnt[3:0] == 4'd15;
   end
-  
+
   always @(posedge clk or posedge rst) begin
     if (rst) begin
       cnt <= 0;

@@ -14,9 +14,10 @@ module counter_tb;
     $dumpfile("counter.vcd");
     $dumpvars(1, counter0);
 
-    clk <= 0;
-    rst <= 1;
-    #2 rst <= 0;
+    clk = 0;
+    rst = 1;
+    #2
+    rst = 0;
 
     #1000 $finish;
   end

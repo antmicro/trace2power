@@ -1,0 +1,69 @@
+variables:
+  GIT_SUBMODULE_STRATEGY: recursive
+
+.install-build-deps: &install-build-deps
+  before_script:
+  - export DEBIAN_FRONTEND=noninteractive
+  - apt -qqy update
+  - apt -y install wget gzip curl build-essential
+  - curl https://sh.rustup.rs -sSf | sh -s -- -y
+  - source $HOME/.cargo/env
+
+.install-runtime-test-deps: &install-runtime-test-deps |-
+  export DEBIAN_FRONTEND=noninteractive
+  apt -qqy update &> /dev/null
+  apt -y install gzip tar build-essential iverilog time python3-pip python3-venv
+  python3 -m venv venv && source venv/bin/activate
+  python3 -m pip install -r examples/requirements.txt
+
+build_debug:
+  image: ${CI_REGISTRY_IMAGE}:ubuntu24.10-orfs-synth
+  stage: build
+  <<: *install-build-deps
+  script:
+  - source $HOME/.cargo/env
+  - cargo build
+  artifacts:
+    paths:
+    - target/debug/trace2power
+    - Cargo.lock
+
+build_release:
+  image: ${CI_REGISTRY_IMAGE}:ubuntu24.10-orfs-synth
+  stage: build
+  <<: *install-build-deps
+  script:
+  - source $HOME/.cargo/env
+  - cargo build --release
+  artifacts:
+    paths:
+    - target/release/trace2power
+    - Cargo.lock
+
+test_debug:
+  image: ${CI_REGISTRY_IMAGE}:ubuntu24.10-orfs-synth
+  stage: test
+  before_script:
+  - *install-runtime-test-deps
+  script:
+  - source venv/bin/activate
+  - export TRACE2POWER=`realpath target/debug/trace2power`
+  - export ORFS=/OpenROAD-flow-scripts
+  - python examples/test.py
+  artifacts:
+    when: always
+    paths: ["examples/*/out/*"]
+
+test_release:
+  image: ${CI_REGISTRY_IMAGE}:ubuntu24.10-orfs-synth
+  stage: test
+  before_script:
+  - *install-runtime-test-deps
+  script:
+  - source venv/bin/activate
+  - export TRACE2POWER=`realpath target/release/trace2power`
+  - export ORFS=/OpenROAD-flow-scripts
+  - python examples/test.py
+  artifacts:
+    when: always
+    paths: ["examples/*/out/*"]
