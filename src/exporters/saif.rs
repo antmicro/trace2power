@@ -49,7 +49,7 @@ fn export_net<'w, W>(
             format!("{}[{}]", port.name(waveform.hierarchy()), idx)
         } else {
             port.name(waveform.hierarchy()).into()
-        };
+        }.replace('\\', "\\\\");
         write_indent(out, indent)?;
         write!(
             out,
@@ -121,7 +121,7 @@ pub fn export<W>(
     waveform: &Waveform,
     all_sig_refs: Vec<SignalRef>,
     all_names: Vec<String>,
-    clk_period: f64,
+    _clk_period: f64,
     mut out: W
 ) -> std::io::Result<()>
     where W: std::io::Write
