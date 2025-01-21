@@ -18,6 +18,7 @@ if { $power_activity_fmt == "vcd" } {
     # TODO: Fix -pins -> -input_ports ?
     source $out_dir/$::env(DESIGN).tcl
     set_pin_activity_and_duty
+} elseif { $power_activity_fmt == "null" } {
 } else {
     echo "INCORRECT ACTIVITY FORMAT"
 }

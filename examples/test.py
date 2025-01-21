@@ -2,9 +2,11 @@ import subprocess
 from pathlib import Path
 import os
 import shutil
-from typing import Literal
+from typing import Literal, Optional
 import colorama
 import re
+from argparse import ArgumentParser
+import io
 
 MY_DIR = Path(__file__).parent.absolute()
 
@@ -23,21 +25,24 @@ class TestError(Exception):
     def __init__(self, message: str):
         super().__init__(message)
 
+    @property
+    def msg(self) -> str: return self.args[0]
+
     def pretty(self):
-        return f'{colorama.Fore.RED}{self.args[0]}{colorama.Fore.RESET}'
+        return f'{colorama.Fore.RED}{self.msg}{colorama.Fore.RESET}'
 
 class Project:
     def __init__(
         self,
-        directory: Path,
         name: str,
         testbench_sources: list[str],
         rtl_sources: list[str],
         clk_freq: float,
         top: str,
-        scope: str
+        scope: str,
+        directory: Optional[Path] = None,
     ):
-        self.directory = directory.absolute()
+        self.directory = directory.absolute() if directory is not None else MY_DIR / name
         self.name = name
         self.clk_freq = clk_freq
         self.top = top
@@ -59,24 +64,34 @@ class Project:
             f.writelines([
                 f'export PLATFORM = {self.pdk}\n',
                 f'export DESIGN_NICKNAME = {self.name}\n',
-                f'export DESIGN_NAME = {self.name}\n',
+                f'export DESIGN_NAME = {self.top}\n',
                  'export VERILOG_FILES = ' + \
                     ' '.join(f'$(PROJECT_DIR)/{s}' for s in self.rtl_sources) + '\n',
                 f'export SDC_FILE = $(PROJECT_DIR)/constraints.sdc\n'
             ])
 
-
-    def simulate_testbench(self):
-        self._step_info('Simulating testbench with Icarus Verilog')
+    def simulate_testbench(self, gate_level: bool = False):
+        sim_type_str = 'gate level' if gate_level else 'rtl'
+        self._step_info(f'Simulating testbench with Icarus Verilog ({sim_type_str})')
 
         vvp_file = self.out / (self.name + '.vvp')
-        cp = subprocess.run([
-            IVERILOG,
-            *(self.directory / f for f in self.testbench_sources),
-            *(self.directory / f for f in self.rtl_sources),
-            '-g2012',
-            '-o', vvp_file
-        ])
+        if gate_level:
+            pdk_impl = ORFS / f'flow/platforms/{self.pdk}/work_around_yosys/formal_pdk.v'
+            cp = subprocess.run([IVERILOG,
+                *(self.directory / f for f in self.testbench_sources),
+                self.out / f'{self.name}_synth.v',
+                str(pdk_impl),
+                '-g2012',
+                '-o', vvp_file
+            ])
+        else:
+            cp = subprocess.run([
+                IVERILOG,
+                *(self.directory / f for f in self.testbench_sources),
+                *(self.directory / f for f in self.rtl_sources),
+                '-g2012',
+                '-o', vvp_file
+            ])
         if cp.returncode != 0:
             raise TestError(f'iverilog exited with non-zero code: {cp.returncode}')
         cp = subprocess.run(['vvp', vvp_file], cwd=self.out)
@@ -105,77 +120,168 @@ class Project:
         if cp.returncode != 0:
             raise TestError(f'make synth exited with non-zero code: {cp.returncode}')
         shutil.copy(
-            str(ORFS / f'flow/results/sky130hd/{self.name}/base/1_synth.v'),
+            str(ORFS / f'flow/results/{self.pdk}/{self.name}/base/1_synth.v'),
             str(self.directory / f'out/{self.name}_synth.v')
         )
 
     def process_vcd(self, output_format: Literal['tcl', 'saif']):
         self._step_info(f'Converting VCD with trace2power to {output_format.upper()}')
 
+        args=[
+            TRACE2POWER,
+            str(self.out / (self.name + '.vcd')),
+            '--clk-freq', str(self.clk_freq),
+            '--output-format', output_format
+        ]
+        if output_format == 'tcl':
+            args += ['--scope', self.scope.replace('/', '.')]
+
         with open(self.directory / f'out/{self.name}.{output_format}', 'w+') as f:
-            cp = subprocess.run(
-                args=[
-                    TRACE2POWER,
-                    str(self.directory / 'out' / (self.name + '.vcd')),
-                    '--clk-freq', str(self.clk_freq),
-                    '--output-format', output_format
-                ],
-                stdout=f
-            )
+            cp = subprocess.run(args=args, stdout=f)
             if cp.returncode != 0:
                 raise TestError(f'trace2power exited with non-zero code: {cp.returncode}')
 
-    def create_power_reports(self, *activity_formats: Literal['vcd', 'tcl', 'saif']):
-        self._step_info('Performing power analysis with OpenSTA')
+    def create_power_report(self, activity_fmt: Literal['vcd', 'tcl', 'saif', 'null']):
+        self._step_info(f'Performing power analysis with OpenSTA for {activity_fmt}')
 
-        for activity_fmt in activity_formats:
-            pins_annotated = False
-            with subprocess.Popen(
-                args=[str(OPEN_STA), '-exit', str(MY_DIR / 'sta.tcl')],
-                env={
-                    'ORFS': str(ORFS),
-                    'DESIGN': str(self.name),
-                    'DESIGN_TOP': str(self.top),
-                    'PROJECT_DIR': str(self.directory),
-                    'DESIGN_SCOPE': str(self.scope),
-                    'POWER_ACTIVITY_FMT': activity_fmt
-                },
-                stdout=subprocess.PIPE,
-                bufsize=1,
-                universal_newlines=True
-            ) as p:
-                for line in p.stdout:
-                    m = re.match('Annotated ([0-9]+) pin activities.', line.strip())
-                    if m is not None:
-                        print(line, end='', flush=True)
-                        if m.group(1) == '0':
-                            raise TestError('Zero pins were annotated')
-                        pins_annotated = True
-            # TODO: The version of OpenSTA (aa598a2) currently included in OpenROAD (2978ae6) does
-            # not report the number of activities read from a SAIF file. This has been added in
-            # b0bd2d8. Once this makes its way to OpenROAD, this new version should be included in
-            # an updated version of CI image and the list of activity formats in this conditional
-            # statement should be expanded to include 'saif'.
-            if activity_fmt in ['vcd'] and not pins_annotated:
-                raise TestError('Pin annotation was not attempted')
+        pins_annotated = False
+        with subprocess.Popen(
+            args=[str(OPEN_STA), '-exit', str(MY_DIR / 'sta.tcl')],
+            env={
+                'ORFS': str(ORFS),
+                'DESIGN': str(self.name),
+                'DESIGN_TOP': str(self.top),
+                'PROJECT_DIR': str(self.directory),
+                'DESIGN_SCOPE': str(self.scope),
+                'POWER_ACTIVITY_FMT': activity_fmt
+            },
+            stdout=subprocess.PIPE,
+            bufsize=1,
+            universal_newlines=True
+        ) as p:
+            for line in p.stdout:
+                m = re.match('Annotated ([0-9]+) pin activities.', line.strip())
+                print(line, end='', flush=True)
+                if m is not None:
+                    if m.group(1) == '0':
+                        raise TestError('Zero pins were annotated')
+                    pins_annotated = True
+        # WARNING: The version of OpenSTA (aa598a2) currently included in OpenROAD (2978ae6) does
+        # not report the number of activities read from a SAIF file. This has been added in
+        # b0bd2d8. Once this makes its way to OpenROAD, this new version should be included in
+        # an updated version of CI image and the list of activity formats in this conditional
+        # statement should be expanded to include 'saif'.
+        if activity_fmt in ['vcd', 'saif'] and not pins_annotated:
+            raise TestError('Pin annotation was not attempted')
 
-            report_path = self.directory / f'out/power_report_{activity_fmt}.txt'
+        report_path = self.directory / f'out/power_report_{activity_fmt}.txt'
 
-            try:
-                with open(report_path) as f:
-                    print(
-                        f'::: {colorama.Style.BRIGHT}{activity_fmt.upper()}'
-                        f'{colorama.Style.RESET_ALL} power report :::',
-                        flush=True
-                        )
-                    print(f.read())
-            except FileNotFoundError:
-                raise TestError(f'Report "{report_path}" was not generated')
+        try:
+            with open(report_path) as f:
+                print(
+                    f'::: {colorama.Style.BRIGHT}{activity_fmt.upper()}'
+                    f'{colorama.Style.RESET_ALL} power report :::',
+                    flush=True
+                    )
+                print(f.read())
+        except FileNotFoundError:
+            raise TestError(f'Report "{report_path}" was not generated')
+
+def check_report_match(name: str, reference: str, out, **reports: str) -> bool:
+    ref_content = reports.get(reference)
+    assert ref_content is not None
+
+    reports_differ = False
+    for content in reports.values():
+        if content != ref_content:
+            reports_differ = True
+            break
+
+    if reports_differ:
+        print(
+            f'{colorama.Back.GREEN}Power reports for {name} match!'
+            f'{colorama.Back.RESET}',
+            flush=True
+        )
+    else:
+        print(
+            f'{colorama.Back.RED}Power reports for {name} differ!{colorama.Back.RESET}',
+            flush=True
+        )
+
+    for report_name, content in reports.items():
+        if report_name == reference:
+            continue
+        if content == ref_content:
+            print(f'* {colorama.Fore.GREEN}✔{colorama.Fore.RESET} {report_name}: PASS', file=out)
+        else:
+            print(
+                f'* {colorama.Fore.RED}✘{colorama.Fore.RESET} {report_name}: FAIL (mismatch)',
+                file=out
+            )
+
+    return reports_differ
+
+
+def test_example(example: Project, summary) -> bool:
+    print(
+        f'{colorama.Back.CYAN}Tesing example {example.name}{colorama.Back.RESET}', flush=True
+    )
+    if (example.out).exists():
+        shutil.rmtree(str(example.out))
+    example.out.mkdir()
+
+    test_pass = True
+    saif_pass = True
+    tcl_pass = True
+
+    def fail(err: TestError, summary_msg: str) -> bool:
+        print(f'ERROR ({example.name}): {e.pretty()}')
+        print(f'* {colorama.Fore.RED}✘{colorama.Fore.RESET} {summary_msg}', file=summary)
+        test_pass = False
+        return False
+
+    try:
+        example.write_config()
+        example.synthesize_design()
+        example.simulate_testbench(gate_level=True)
+    except TestError as e: return fail(e, f'failure at simulation/synthesis ({e.msg})')
+
+    try: example.create_power_report('null')
+    except TestError as e: return fail(e, f'failed to create null report ({e.msg})')
+    try: example.create_power_report('vcd')
+    except TestError as e: return fail(e, f'failed to create vcd report')
+
+    try: example.process_vcd('saif')
+    except TestError as e: saif_pass = fail(e, f'failure in trace2power ({e.msg})')
+    if saif_pass:
+        try: example.create_power_report('saif')
+        except TestError as e: saif_pass = fail(e, f'saif: failed to create report ({e.msg})')
+    try: example.process_vcd('tcl')
+    except TestError as e: tcl_pass = fail(e, f'failure in trace2power ({e.msg})')
+    if tcl_pass:
+        try: example.create_power_report('tcl')
+        except TestError as e: saif_pass = fail(e, f'tcl: failed to create report ({e.msg})')
+
+    with open(example.directory / 'out/power_report_vcd.txt', 'r') as f:
+        vcd_report = f.read()
+    with open(example.directory / 'out/power_report_saif.txt', 'r') as f:
+        saif_report = f.read()
+    with open(example.directory / 'out/power_report_tcl.txt', 'r') as f:
+        tcl_report = f.read()
+
+    return check_report_match(
+        name=example.name,
+        reference='vcd',
+        out=summary,
+        vcd=vcd_report,
+        saif=saif_report,
+        tcl=tcl_report,
+    )
 
 def main():
     examples = [
         Project(
-            directory=MY_DIR / 'counter',
             name='counter',
             testbench_sources=['counter_tb.v'],
             rtl_sources=['counter.v'],
@@ -184,55 +290,50 @@ def main():
             scope='counter_tb/counter0'
         ),
         Project(
-            directory=MY_DIR / 'tristate',
             name='tristate',
             testbench_sources=['tristate_tb.sv'],
             rtl_sources=['tristate.v'],
             clk_freq=500000000,
             top='tristate',
             scope='tristate_tb/tristate0'
+        ),
+        # Warning OpenSTA @ aa598a2 doe snot read glitch activities in SAFI files equivalently
+        # to reads from VCDs.
+        Project(
+            name='hierarchical',
+            testbench_sources=['hierarchical_tb.sv'],
+            rtl_sources=['hierarchical.sv'],
+            clk_freq=500000000,
+            top='hierarchical',
+            scope='hierarchical_tb/dut'
+        ),
+        # WARNING: OpenSTA @ aa598a2 does not support combo-only designs
+        Project(
+            name='tail',
+            testbench_sources=['tail.sv'],
+            rtl_sources=['big_and.sv'],
+            clk_freq=500000000,
+            top='big_and',
+            scope='tail/dut'
         )
     ]
 
+    arg_parser = ArgumentParser()
+    arg_parser.add_argument('project_name', type=str, nargs='*')
+    args = arg_parser.parse_args()
+
     tests_ok = True
 
+    summary = io.StringIO()
+
     for example in examples:
-        print(
-            f'{colorama.Back.CYAN}Tesing example {example.name}{colorama.Back.RESET}', flush=True
-        )
-        if (example.directory / 'out').exists():
-            shutil.rmtree(str(example.directory / 'out'))
-        (example.directory / 'out').mkdir()
-
-        try:
-            example.write_config()
-            example.simulate_testbench()
-            example.synthesize_design()
-            example.process_vcd('saif')
-            example.process_vcd('tcl')
-            example.create_power_reports('vcd', 'saif')
-        except TestError as e:
-            tests_ok = False
-            print(f'ERROR ({example.name}): {e.pretty()}')
+        if len(args.project_name) != 0 and example.name not in args.project_name:
             continue
+        print(f'{example.name}:', file=summary)
+        tests_ok &= test_example(example, summary)
 
-        with open(example.directory / 'out/power_report_vcd.txt', 'r') as f:
-            vcd_report = f.read()
-        with open(example.directory / 'out/power_report_saif.txt', 'r') as f:
-            saif_report = f.read()
-
-        if vcd_report == saif_report:
-            print(
-                f'{colorama.Back.GREEN}Power reports for {example.name} match!'
-                f'{colorama.Back.RESET}',
-                flush=True
-            )
-        else:
-            print(
-                f'{colorama.Back.RED}Power reports for {example.name} differ!{colorama.Back.RESET}',
-                flush=True
-            )
-            tests_ok = False
+    print(f'\nSUMMARY:\n{summary.getvalue()}')
+    summary.close()
 
     if not tests_ok:
         exit(-1)
