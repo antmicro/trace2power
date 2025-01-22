@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use clap::Parser;
-use wellen;
+use wellen::{self, Var};
 
 pub mod stats;
 mod exporters;
@@ -22,6 +22,13 @@ const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
     remove_scopes_with_empty_name: false,
 };
 
+fn indexed_name(mut name: String, variable: &Var) -> String {
+    if let Some(idx) = variable.index() {
+        name += format!("[{}]", idx.lsb()).as_str();
+    }
+    name
+}
+
 fn process_trace(args: Cli) {
     let mut wave =
         wellen::simple::read_with_options(args.input_file.to_str().unwrap(), &LOAD_OPTS)
@@ -29,7 +36,7 @@ fn process_trace(args: Cli) {
     let (all_sig_refs, all_names): (Vec<_>, Vec<_>) = wave
         .hierarchy()
         .iter_vars()
-        .map(|var| (var.signal_ref(), var.full_name(wave.hierarchy())))
+        .map(|var| (var.signal_ref(), indexed_name(var.full_name(wave.hierarchy().into()), var)))
         .collect();
     wave.load_signals_multi_threaded(&all_sig_refs[..]);
 
