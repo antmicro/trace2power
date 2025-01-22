@@ -40,12 +40,12 @@ fn export_net<'w, W>(
 ) -> std::io::Result<()>
     where W: std::io::Write
 {
-    let my_stats = &stats[&port.full_name(waveform.hierarchy())];
+    let my_stats = &stats[&crate::indexed_name(port.full_name(waveform.hierarchy()), port)];
     for (idx, stat) in my_stats.iter().enumerate() {
         let name = if my_stats.len() > 1 {
             format!("{}[{}]", port.name(waveform.hierarchy()), idx)
         } else {
-            port.name(waveform.hierarchy()).into()
+            crate::indexed_name(port.name(waveform.hierarchy()).into(), port)
         }.replace('\\', "\\\\");
         write_indent(out, indent)?;
         write!(
