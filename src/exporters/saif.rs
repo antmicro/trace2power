@@ -4,6 +4,7 @@ use indoc::indoc;
 use wellen::{GetItem, TimescaleUnit, Scope, Var, SignalRef};
 use wellen::simple::Waveform;
 use rayon::prelude::*;
+use crate::{Context, LookupPoint};
 use crate::stats::{calc_stats, SignalStats};
 
 struct DisplayTimescaleUnit(TimescaleUnit);
@@ -115,20 +116,17 @@ fn export_scope<'w, W>(
 }
 
 pub fn export<W>(
-    waveform: &Waveform,
-    all_sig_refs: Vec<SignalRef>,
-    all_names: Vec<String>,
-    _clk_period: f64,
+    ctx: Context,
     mut out: W
 ) -> std::io::Result<()>
     where W: std::io::Write
 {
-    let time_end = *waveform.time_table().last().unwrap();
-    let timescale = waveform.hierarchy().timescale().unwrap();
+    let time_end = *ctx.wave.time_table().last().unwrap();
+    let timescale = ctx.wave.hierarchy().timescale().unwrap();
 
-    let var_stats: HashMap<String, Vec<SignalStats>> = all_sig_refs.par_iter()
-        .map(|sig_ref| waveform.get_signal(*sig_ref).unwrap())
-        .zip(all_names)
+    let var_stats: HashMap<String, Vec<SignalStats>> = ctx.all_sig_refs.par_iter()
+        .map(|sig_ref| ctx.wave.get_signal(*sig_ref).unwrap())
+        .zip(ctx.all_names)
         .map(|(sig, fname)| (fname.clone(), calc_stats(sig, fname, time_end)))
         .collect();
 
@@ -155,9 +153,15 @@ pub fn export<W>(
         time_end
     )?;
 
-    for scope_ref in waveform.hierarchy().scopes() {
-        let scope = waveform.hierarchy().get(scope_ref);
-        export_scope(&mut out, waveform, scope, &var_stats, 1)?;
+    match ctx.lookup_point {
+        LookupPoint::Top => for scope_ref in ctx.wave.hierarchy().scopes() {
+            let scope = ctx.wave.hierarchy().get(scope_ref);
+            export_scope(&mut out, &ctx.wave, scope, &var_stats, 1)?;
+        },
+        LookupPoint::Scope(scope_ref) => {
+            let scope = ctx.wave.hierarchy().get(scope_ref);
+            export_scope(&mut out, &ctx.wave, scope, &var_stats, 1)?;
+        }
     }
 
     write!(out, ")\n")?;

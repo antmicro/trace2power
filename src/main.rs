@@ -1,8 +1,10 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use std::str::FromStr;
+
 use clap::Parser;
-use wellen::{self, Var};
+use wellen::{self, GetItem, Var, simple::Waveform, Hierarchy, ScopeRef, SignalRef};
 
 pub mod stats;
 mod exporters;
@@ -13,7 +15,9 @@ struct Cli {
     #[arg(short, long, value_parser = clap::value_parser!(f64))]
     clk_freq: f64,
     #[arg(long, default_value = "tcl")]
-    output_format: String
+    output_format: String,
+    #[arg(long, short)]
+    scope: Option<String>
 }
 
 const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
@@ -28,31 +32,110 @@ fn indexed_name(mut name: String, variable: &Var) -> String {
     name
 }
 
-fn process_trace(args: Cli) {
-    let mut wave =
-        wellen::simple::read_with_options(args.input_file.to_str().unwrap(), &LOAD_OPTS)
-            .unwrap();
-    let (all_sig_refs, all_names): (Vec<_>, Vec<_>) = wave
-        .hierarchy()
-        .iter_vars()
-        .map(|var| (var.signal_ref(), indexed_name(var.full_name(wave.hierarchy().into()), var)))
-        .collect();
-    wave.load_signals_multi_threaded(&all_sig_refs[..]);
+fn get_scope(hier: &Hierarchy, scope_str: &str) -> Option<ScopeRef> {
+    hier.lookup_scope(scope_str.split('.').collect::<Vec<_>>().as_slice())
+}
 
-    let clk_period = 1.0_f64 / args.clk_freq;
+enum LookupPoint {
+    Top,
+    Scope(ScopeRef)
+}
 
-    type WriteBuf = std::io::Stdout;
+enum OutputFormat {
+    Tcl,
+    Saif
+}
 
-    let exporter = match args.output_format.as_str() {
-        "tcl" => exporters::tcl::export::<WriteBuf>,
-        "saif" => exporters::saif::export::<WriteBuf>,
-        fmt @ _ => panic!("Unknown output format \"{fmt}\""),
-    };
+impl FromStr for OutputFormat {
+    type Err = std::io::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "tcl" => Ok(Self::Tcl),
+            "saif" => Ok(Self::Saif),
+            other @ _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("Format {} is not a valid output format forthis program", other)
+            )),
+        }
+    }
+}
 
-    exporter(&wave, all_sig_refs, all_names, clk_period, std::io::stdout()).unwrap();
+struct Context {
+    wave: Waveform,
+    clk_period: f64,
+    all_sig_refs: Vec<SignalRef>,
+    all_names: Vec<String>,
+    lookup_point: LookupPoint,
+    output_fmt: OutputFormat,
+    scope_prefix_length: usize
+}
+
+impl Context {
+    fn build_from_args(args: &Cli) -> Self {
+        let output_fmt = OutputFormat::from_str(&args.output_format).unwrap();
+
+        let mut wave =
+            wellen::simple::read_with_options(args.input_file.to_str().unwrap(), &LOAD_OPTS)
+                .unwrap();
+
+        let lookup_point = match &args.scope {
+            None => LookupPoint::Top,
+            Some(scope_str) => LookupPoint::Scope(
+                get_scope(wave.hierarchy(), scope_str).expect("Requested scope not found")
+            ),
+        };
+
+        if let (LookupPoint::Scope(_), OutputFormat::Saif) = (&lookup_point, &output_fmt) {
+            panic!("Scoped lookup for SAIF is WIP");
+        }
+
+        // TODO: This can likely be made more performant if we ditch the iterators
+        let lookup_scope_name_prefix = match lookup_point {
+            LookupPoint::Top => "".to_string(),
+            LookupPoint::Scope(scope_ref) => {
+                let scope = wave.hierarchy().get(scope_ref);
+                scope.full_name(wave.hierarchy()).to_string() + "."
+            }
+        };
+        let (all_sig_refs, all_names): (Vec<_>, Vec<_>) = wave
+            .hierarchy()
+            .iter_vars()
+            .map(|var| {
+                (var.signal_ref(), indexed_name(var.full_name(wave.hierarchy().into()), var))
+            })
+            .filter(|(_, fname)| {
+                match lookup_point {
+                    LookupPoint::Top => true,
+                    LookupPoint::Scope(_) => fname.starts_with(&lookup_scope_name_prefix)
+                }
+            })
+            .collect();
+
+        wave.load_signals_multi_threaded(&all_sig_refs[..]);
+
+        let clk_period = 1.0_f64 / args.clk_freq;
+
+        Self {
+            wave,
+            clk_period,
+            all_sig_refs,
+            all_names,
+            lookup_point,
+            output_fmt,
+            scope_prefix_length: lookup_scope_name_prefix.len(),
+        }
+    }
+}
+
+fn process_trace(ctx: Context) {
+    let out = std::io::stdout();
+    match &ctx.output_fmt {
+        OutputFormat::Tcl => exporters::tcl::export(ctx, out),
+        OutputFormat::Saif => exporters::saif::export(ctx, out),
+    }.unwrap()
 }
 
 fn main() {
-    let args = Cli::parse();
-    process_trace(args);
+    let ctx = Context::build_from_args(&Cli::parse());
+    process_trace(ctx);
 }
