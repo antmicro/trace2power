@@ -19,6 +19,7 @@ OPEN_STA=os.environ.get('OPENSTA', ORFS / 'tools/OpenROAD/src/sta/app/sta')
 OPEN_STA=Path(OPEN_STA).absolute()
 
 IVERILOG=os.environ.get('IVERILOG', 'iverilog')
+YOSYS=os.environ.get('YOSYS', ORFS / 'tools/yosys/yosys')
 TRACE2POWER=os.environ.get('TRACE2POWER', 'trace2power')
 
 class TestError(Exception):
@@ -58,9 +59,21 @@ class Project:
     def out(self) -> Path:
         return self.directory / 'out'
 
+    @property
+    def path_config(self) -> Path:
+        return self.out / 'config.mk'
+
+    @property
+    def path_synth(self) -> Path:
+        return self.out / f'{self.name}_synth.v'
+
+    @property
+    def path_netlist(self) -> Path:
+        return self.out / f'{self.name}_synth.json'
+
     def write_config(self):
         self._step_info('Writing config.mk')
-        with open(self.out / 'config.mk', 'w+') as f:
+        with open(self.path_config, 'w+') as f:
             f.writelines([
                 f'export PLATFORM = {self.pdk}\n',
                 f'export DESIGN_NICKNAME = {self.name}\n',
@@ -79,7 +92,7 @@ class Project:
             pdk_impl = ORFS / f'flow/platforms/{self.pdk}/work_around_yosys/formal_pdk.v'
             cp = subprocess.run([IVERILOG,
                 *(self.directory / f for f in self.testbench_sources),
-                self.out / f'{self.name}_synth.v',
+                self.path_synth,
                 str(pdk_impl),
                 '-g2012',
                 '-o', vvp_file
@@ -105,7 +118,7 @@ class Project:
             'make',
             '-C', str(ORFS / 'flow'),
             f'PROJECT_DIR={self.directory}',
-            f'DESIGN_CONFIG={str(self.out / "config.mk")}',
+            f'DESIGN_CONFIG={str(self.path_config)}',
             'clean_all'
             ],
             stdout=subprocess.DEVNULL
@@ -114,27 +127,48 @@ class Project:
             'make',
             '-C', str(ORFS / 'flow'),
             f'PROJECT_DIR={self.directory}',
-            f'DESIGN_CONFIG={str(self.out / "config.mk")}',
+            f'DESIGN_CONFIG={str(self.path_config)}',
             'synth'
         ])
         if cp.returncode != 0:
             raise TestError(f'make synth exited with non-zero code: {cp.returncode}')
         shutil.copy(
             str(ORFS / f'flow/results/{self.pdk}/{self.name}/base/1_synth.v'),
-            str(self.directory / f'out/{self.name}_synth.v')
+            str(self.path_synth)
         )
 
-    def process_vcd(self, output_format: Literal['tcl', 'saif']):
+    def export_gate_level_netlist(self):
+        self._step_info('Exporting netlist with yosys')
+        cp = subprocess.run(
+            args=[
+                YOSYS, '-p',
+                f'read_verilog "{self.path_synth}"; write_json "{self.path_netlist}";'
+            ],
+            stdout=subprocess.DEVNULL
+        )
+        if cp.returncode != 0:
+            return TestError(f'yosys exited with non-zero code: {cp.returncode}')
+
+
+    def process_vcd(
+        self,
+        output_format: Literal['tcl', 'saif'],
+        extra_args: Optional[list[str]] = None
+    ):
         self._step_info(f'Converting VCD with trace2power to {output_format.upper()}')
 
         args=[
             TRACE2POWER,
             str(self.out / (self.name + '.vcd')),
             '--clk-freq', str(self.clk_freq),
-            '--output-format', output_format
+            '--output-format', output_format,
         ]
         if output_format == 'tcl':
-            args += ['--scope', self.scope.replace('/', '.')]
+            args += ['--limit-scope', self.scope.replace('/', '.')]
+        if extra_args is not None:
+            args += extra_args
+
+        print(f'Running trace2power {" ".join(args)}', flush=True)
 
         with open(self.directory / f'out/{self.name}.{output_format}', 'w+') as f:
             cp = subprocess.run(args=args, stdout=f)
@@ -244,6 +278,7 @@ def test_example(example: Project, summary) -> bool:
     try:
         example.write_config()
         example.synthesize_design()
+        example.export_gate_level_netlist()
         example.simulate_testbench(gate_level=True)
     except TestError as e: return fail(e, f'failure at simulation/synthesis ({e.msg})')
 
@@ -252,7 +287,15 @@ def test_example(example: Project, summary) -> bool:
     try: example.create_power_report('vcd')
     except TestError as e: return fail(e, f'failed to create vcd report')
 
-    try: example.process_vcd('saif')
+    try:
+        example.process_vcd(
+            output_format='saif',
+            extra_args=[
+                '--netlist', str(example.path_netlist),
+                '--top', example.top,
+                '--top-scope', example.scope.replace('/', '.')
+            ]
+        )
     except TestError as e: saif_pass = fail(e, f'failure in trace2power ({e.msg})')
     if saif_pass:
         try: example.create_power_report('saif')
@@ -261,23 +304,27 @@ def test_example(example: Project, summary) -> bool:
     except TestError as e: tcl_pass = fail(e, f'failure in trace2power ({e.msg})')
     if tcl_pass:
         try: example.create_power_report('tcl')
-        except TestError as e: saif_pass = fail(e, f'tcl: failed to create report ({e.msg})')
+        except TestError as e: tcl_pass = fail(e, f'tcl: failed to create report ({e.msg})')
 
     with open(example.directory / 'out/power_report_vcd.txt', 'r') as f:
         vcd_report = f.read()
-    with open(example.directory / 'out/power_report_saif.txt', 'r') as f:
-        saif_report = f.read()
-    with open(example.directory / 'out/power_report_tcl.txt', 'r') as f:
-        tcl_report = f.read()
+
+    reports = { 'vcd': vcd_report }
+    if tcl_pass:
+        with open(example.directory / 'out/power_report_tcl.txt', 'r') as f:
+            tcl_report = f.read()
+        reports['tcl'] = tcl_report
+    if saif_pass:
+        with open(example.directory / 'out/power_report_saif.txt', 'r') as f:
+            saif_report = f.read()
+        reports['saif'] = saif_report
 
     return check_report_match(
         name=example.name,
         reference='vcd',
         out=summary,
-        vcd=vcd_report,
-        saif=saif_report,
-        tcl=tcl_report,
-    )
+        **reports
+    ) and test_pass
 
 def main():
     examples = [

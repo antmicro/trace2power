@@ -45,7 +45,7 @@ module hierarchical_tb();
     static logic rval = $random(seed) % 10000;
 
     $dumpfile("hierarchical.vcd");
-    $dumpvars(1, dut);
+    $dumpvars(0, dut);
 
     reset(16);
     repeat(32)

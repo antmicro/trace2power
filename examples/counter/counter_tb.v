@@ -12,7 +12,7 @@ module counter_tb;
 
   initial begin
     $dumpfile("counter.vcd");
-    $dumpvars(1, counter0);
+    $dumpvars(0, counter0);
 
     clk = 0;
     rst = 1;
