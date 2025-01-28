@@ -31,29 +31,55 @@ class Project:
         self,
         directory: Path,
         name: str,
-        simulation_files: list[str],
+        testbench_sources: list[str],
+        rtl_sources: list[str],
         clk_freq: float,
         top: str,
         scope: str
     ):
         self.directory = directory.absolute()
         self.name = name
-        self.simulation_files = [str(self.directory / f) for f in simulation_files]
         self.clk_freq = clk_freq
         self.top = top
         self.scope = scope
+        self.testbench_sources = testbench_sources
+        self.rtl_sources = rtl_sources
+        self.pdk = 'sky130hd' #TODO: glob for .lib files in sta.tcl to make it reconfigurable
 
     def _step_info(self, txt: str) -> None:
         print(f'{colorama.Fore.CYAN}{txt}{colorama.Fore.RESET}', flush=True)
 
+    @property
+    def out(self) -> Path:
+        return self.directory / 'out'
+
+    def write_config(self):
+        self._step_info('Writing config.mk')
+        with open(self.out / 'config.mk', 'w+') as f:
+            f.writelines([
+                f'export PLATFORM = {self.pdk}\n',
+                f'export DESIGN_NICKNAME = {self.name}\n',
+                f'export DESIGN_NAME = {self.name}\n',
+                 'export VERILOG_FILES = ' + \
+                    ' '.join(f'$(PROJECT_DIR)/{s}' for s in self.rtl_sources) + '\n',
+                f'export SDC_FILE = $(PROJECT_DIR)/constraints.sdc\n'
+            ])
+
+
     def simulate_testbench(self):
         self._step_info('Simulating testbench with Icarus Verilog')
 
-        vvp_file = self.directory / 'out' / (self.name + '.vvp')
-        cp = subprocess.run([IVERILOG, *self.simulation_files, '-g2012', '-o', vvp_file])
+        vvp_file = self.out / (self.name + '.vvp')
+        cp = subprocess.run([
+            IVERILOG,
+            *(self.directory / f for f in self.testbench_sources),
+            *(self.directory / f for f in self.rtl_sources),
+            '-g2012',
+            '-o', vvp_file
+        ])
         if cp.returncode != 0:
             raise TestError(f'iverilog exited with non-zero code: {cp.returncode}')
-        cp = subprocess.run(['vvp', vvp_file], cwd=self.directory / 'out')
+        cp = subprocess.run(['vvp', vvp_file], cwd=self.out)
         if cp.returncode != 0:
             raise TestError(f'vpp exited with non-zero code: {cp.returncode}')
 
@@ -64,7 +90,7 @@ class Project:
             'make',
             '-C', str(ORFS / 'flow'),
             f'PROJECT_DIR={self.directory}',
-            f'DESIGN_CONFIG={str(self.directory / "config.mk")}',
+            f'DESIGN_CONFIG={str(self.out / "config.mk")}',
             'clean_all'
             ],
             stdout=subprocess.DEVNULL
@@ -73,7 +99,7 @@ class Project:
             'make',
             '-C', str(ORFS / 'flow'),
             f'PROJECT_DIR={self.directory}',
-            f'DESIGN_CONFIG={str(self.directory / "config.mk")}',
+            f'DESIGN_CONFIG={str(self.out / "config.mk")}',
             'synth'
         ])
         if cp.returncode != 0:
@@ -151,7 +177,8 @@ def main():
         Project(
             directory=MY_DIR / 'counter',
             name='counter',
-            simulation_files=['counter_tb.v', 'counter.v'],
+            testbench_sources=['counter_tb.v'],
+            rtl_sources=['counter.v'],
             clk_freq=500000000,
             top='counter',
             scope='counter_tb/counter0'
@@ -159,7 +186,8 @@ def main():
         Project(
             directory=MY_DIR / 'tristate',
             name='tristate',
-            simulation_files=['tristate_tb.sv', 'tristate.v'],
+            testbench_sources=['tristate_tb.sv'],
+            rtl_sources=['tristate.v'],
             clk_freq=500000000,
             top='tristate',
             scope='tristate_tb/tristate0'
@@ -177,6 +205,7 @@ def main():
         (example.directory / 'out').mkdir()
 
         try:
+            example.write_config()
             example.simulate_testbench()
             example.synthesize_design()
             example.process_vcd('saif')
