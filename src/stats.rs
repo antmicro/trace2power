@@ -17,12 +17,12 @@ pub struct SignalStats {
 }
 
 impl SignalStats {
-    fn time_stat_of_value<'s>(&'s mut self, val: char) -> &'s mut u32 {
+    fn modify_time_stat_of_value<'s, F>(&'s mut self, val: char, f: F) where F: FnOnce(u32) -> u32 {
         match val {
-            '1' => &mut self.high_time,
-            '0' => &mut self.low_time,
-            'x' => &mut self.x_time,
-            'z' => &mut self.z_time,
+            '1' => self.high_time = f(self.high_time),
+            '0' => self.low_time = f(self.low_time),
+            'x' => self.x_time = f(self.x_time),
+            'z' => self.z_time = f(self.z_time),
             _ => panic!("Invalid value"),
         }
     }
@@ -86,15 +86,18 @@ pub fn calc_stats(sig: &Signal, name: String, time_end: wellen::Time) -> Vec<Sig
                 }
             }
 
-            *ss[i].time_stat_of_value(prev_c) += ts - prev_ts;
+            ss[i].modify_time_stat_of_value(prev_c, |v| v + ts - prev_ts);
         }
         prev_ts = ts;
         prev_val = val;
     }
 
     for (prev_c, i) in izip!(prev_val.to_bit_string().unwrap().chars(), 0..) {
-        *ss[i].time_stat_of_value(prev_c) += (time_end - (prev_ts as u64)) as u32;
+        ss[i].modify_time_stat_of_value(prev_c, |v| v + (time_end - (prev_ts as u64)) as u32);
     }
+
+    // TODO: Figure out how the indexing direction is denoted
+    ss.reverse();
 
     return ss;
 }
