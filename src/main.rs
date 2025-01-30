@@ -2,9 +2,12 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::str::FromStr;
+use std::collections::HashMap;
 
 use clap::Parser;
-use wellen::{self, GetItem, Var, simple::Waveform, Hierarchy, ScopeRef, SignalRef};
+use stats::PackedStats;
+use wellen::{self, simple::Waveform, GetItem, Hierarchy, Scope, ScopeRef, SignalRef, Var, VarRef};
+use rayon::prelude::*;
 
 pub mod stats;
 pub mod netlist;
@@ -12,6 +15,14 @@ mod exporters;
 
 use netlist::Netlist;
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HashVarRef(VarRef);
+
+impl std::hash::Hash for HashVarRef {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.index().hash(state);
+    }
+}
 
 #[derive(Parser)]
 struct Cli {
@@ -28,6 +39,8 @@ struct Cli {
     top: Option<String>,
     #[arg(long)]
     top_scope: Option<String>,
+    #[arg(short, long)]
+    blackboxes_only: bool,
 }
 
 const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
@@ -46,6 +59,7 @@ fn get_scope(hier: &Hierarchy, scope_str: &str) -> Option<ScopeRef> {
     hier.lookup_scope(scope_str.split('.').collect::<Vec<_>>().as_slice())
 }
 
+#[derive(Copy, Clone)]
 enum LookupPoint {
     Top,
     Scope(ScopeRef)
@@ -70,17 +84,70 @@ impl FromStr for OutputFormat {
     }
 }
 
+// Wellen has no good iterator over ALL VarRefs, so I made one. The generics are here to deal with
+// hidden iterator types.
+struct VarRefIterator<'w, HIter, SIter, F, S>
+where
+    HIter: Iterator<Item = VarRef> + 'w,
+    SIter: Iterator<Item = ScopeRef> + 'w,
+    F: Fn(&'w Scope) -> HIter,
+    S: Fn(&'w Scope) -> SIter
+{
+    hierarchy: &'w Hierarchy,
+    get_iter_of_scope: F,
+    get_siter_of_scope: S,
+    scopes: Vec<&'w Scope>,
+    iter: HIter,
+    siter: SIter,
+}
+
+impl<'w, HIter, SIter, F, S> Iterator for VarRefIterator<'w, HIter, SIter, F, S>
+where
+    HIter: Iterator<Item = VarRef> + 'w,
+    SIter: Iterator<Item = ScopeRef> + 'w,
+    F: Fn(&'w Scope) -> HIter,
+    S: Fn(&'w Scope) -> SIter
+{
+    type Item = VarRef;
+    fn next(&mut self) -> Option<Self::Item> {
+        match self.iter.next() {
+            Some(v) => Some(v),
+            None => {
+                if let Some(scope) = self.scopes.pop() {
+                    self.iter = (self.get_iter_of_scope)(scope);
+                    self.siter = (self.get_siter_of_scope)(scope);
+                    self.scopes.extend(self.siter.by_ref().map(|s| self.hierarchy.get(s)));
+                    self.next()
+                } else {
+                    None
+                }
+            }
+        }
+    }
+}
+
+fn var_refs_iter<'h>(hierarchy: &'h Hierarchy) -> impl Iterator<Item = VarRef> + 'h {
+    VarRefIterator {
+        hierarchy: &hierarchy,
+        scopes: hierarchy.scopes().map(|s| hierarchy.get(s)).collect(),
+        get_iter_of_scope: |s: &Scope| s.vars(hierarchy),
+        get_siter_of_scope: |s: &Scope| s.scopes(hierarchy),
+        iter: hierarchy.vars(),
+        siter: hierarchy.scopes(),
+    }
+}
+
 struct Context {
     wave: Waveform,
     clk_period: f64,
-    all_sig_refs: Vec<SignalRef>,
-    all_names: Vec<String>,
+    stats: HashMap<HashVarRef, PackedStats>,
     lookup_point: LookupPoint,
     output_fmt: OutputFormat,
     scope_prefix_length: usize,
     netlist: Option<Netlist>,
     top: String,
-    top_scope: Option<ScopeRef>
+    top_scope: Option<ScopeRef>,
+    blackboxes_only: bool
 }
 
 impl Context {
@@ -103,7 +170,6 @@ impl Context {
             panic!("Scoped lookup for SAIF is WIP");
         }
 
-        // TODO: This can likely be made more performant if we ditch the iterators
         let lookup_scope_name_prefix = match lookup_point {
             LookupPoint::Top => "".to_string(),
             LookupPoint::Scope(scope_ref) => {
@@ -111,21 +177,34 @@ impl Context {
                 scope.full_name(wave.hierarchy()).to_string() + "."
             }
         };
-        let (all_sig_refs, all_names): (Vec<_>, Vec<_>) = wave
-            .hierarchy()
-            .iter_vars()
-            .map(|var| {
-                (var.signal_ref(), indexed_name(var.full_name(wave.hierarchy().into()), var))
-            })
-            .filter(|(_, fname)| {
-                match lookup_point {
-                    LookupPoint::Top => true,
-                    LookupPoint::Scope(_) => fname.starts_with(&lookup_scope_name_prefix)
-                }
-            })
-            .collect();
 
-        wave.load_signals_multi_threaded(&all_sig_refs[..]);
+        let (all_vars, all_signals): (Vec<_>, Vec<_>) = match lookup_point {
+            LookupPoint::Top => var_refs_iter(wave.hierarchy())
+                .map(|var_ref| (var_ref, wave.hierarchy().get(var_ref).signal_ref()))
+                .unzip(),
+            LookupPoint::Scope(_) => var_refs_iter(wave.hierarchy())
+                .map(|var_ref| (var_ref, wave.hierarchy().get(var_ref)))
+                .filter(|(_, var)| {
+                    let fname = indexed_name(var.full_name(wave.hierarchy().into()), var);
+                    fname.starts_with(&lookup_scope_name_prefix)
+                })
+                .map(|(var_ref, var)| (var_ref, var.signal_ref()))
+                .unzip()
+        };
+
+        wave.load_signals_multi_threaded(&all_signals);
+
+        let time_end = *wave.time_table().last().unwrap();
+
+        // TODO: A massive optimization that can be done here is to calculate stats only
+        // for exported signals instead of all nets
+        // It's easy to do with the current implementation of DFS (see src/exporter/mod.rs).
+        // However it's single-threaded and parallelizing it efficiently is non-trivial.
+        let stats: HashMap<HashVarRef, stats::PackedStats> = all_vars.par_iter()
+            .zip(all_signals)
+            .map(|(var_ref, sig_ref)| (*var_ref, wave.get_signal(sig_ref).unwrap()))
+            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats(sig, time_end)))
+            .collect();
 
         let clk_period = 1.0_f64 / args.clk_freq;
 
@@ -138,8 +217,7 @@ impl Context {
         Self {
             wave,
             clk_period,
-            all_sig_refs,
-            all_names,
+            stats: stats,
             lookup_point,
             output_fmt,
             scope_prefix_length: lookup_scope_name_prefix.len(),
@@ -151,6 +229,7 @@ impl Context {
             }),
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
+            blackboxes_only: args.blackboxes_only
         }
     }
 }

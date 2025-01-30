@@ -17,7 +17,7 @@ module tail();
 
   initial begin
     $dumpfile("tail.vcd");
-    $dumpvars(1, dut);
+    $dumpvars(0, dut);
 
     set(0, 0, 0, 0);
 
