@@ -226,12 +226,13 @@ def check_report_match(name: str, reference: str, out, **reports: str) -> bool:
     assert ref_content is not None
 
     reports_differ = False
-    for content in reports.values():
+    for k, content in reports.items():
         if content != ref_content:
+            print(f'Report {k} differs')
             reports_differ = True
             break
 
-    if reports_differ:
+    if not reports_differ:
         print(
             f'{colorama.Back.GREEN}Power reports for {name} match!'
             f'{colorama.Back.RESET}',
@@ -257,13 +258,23 @@ def check_report_match(name: str, reference: str, out, **reports: str) -> bool:
     return reports_differ
 
 
-def test_example(example: Project, summary) -> bool:
+def test_example(
+    example: Project,
+    summary,
+    synth: bool = True,
+    sim: bool = True,
+    trace2power: bool = True,
+    formats: Optional[set[str]] = None,
+) -> bool:
+    if formats is None: formats = {'saif', 'tcl'}
+
     print(
         f'{colorama.Back.CYAN}Tesing example {example.name}{colorama.Back.RESET}', flush=True
     )
-    if (example.out).exists():
+    if (example.out).exists() and synth:
         shutil.rmtree(str(example.out))
-    example.out.mkdir()
+    if synth:
+        example.out.mkdir()
 
     test_pass = True
     saif_pass = True
@@ -276,10 +287,12 @@ def test_example(example: Project, summary) -> bool:
         return False
 
     try:
-        example.write_config()
-        example.synthesize_design()
-        example.export_gate_level_netlist()
-        example.simulate_testbench(gate_level=True)
+        if synth:
+            example.write_config()
+            example.synthesize_design()
+            example.export_gate_level_netlist()
+        if sim:
+            example.simulate_testbench(gate_level=True)
     except TestError as e: return fail(e, f'failure at simulation/synthesis ({e.msg})')
 
     try: example.create_power_report('null')
@@ -287,34 +300,40 @@ def test_example(example: Project, summary) -> bool:
     try: example.create_power_report('vcd')
     except TestError as e: return fail(e, f'failed to create vcd report')
 
-    try:
-        example.process_vcd(
-            output_format='saif',
-            extra_args=[
-                '--netlist', str(example.path_netlist),
-                '--top', example.top,
-                '--top-scope', example.scope.replace('/', '.')
-            ]
-        )
-    except TestError as e: saif_pass = fail(e, f'failure in trace2power ({e.msg})')
-    if saif_pass:
-        try: example.create_power_report('saif')
-        except TestError as e: saif_pass = fail(e, f'saif: failed to create report ({e.msg})')
-    try: example.process_vcd('tcl')
-    except TestError as e: tcl_pass = fail(e, f'failure in trace2power ({e.msg})')
-    if tcl_pass:
-        try: example.create_power_report('tcl')
-        except TestError as e: tcl_pass = fail(e, f'tcl: failed to create report ({e.msg})')
+    if 'saif' in formats:
+        if trace2power:
+            try:
+                example.process_vcd(
+                    output_format='saif',
+                    extra_args=[
+                        '--netlist', str(example.path_netlist),
+                        '--top', example.top,
+                        '--top-scope', example.scope.replace('/', '.'),
+                        '--blackboxes-only'
+                    ]
+                )
+            except TestError as e: saif_pass = fail(e, f'failure in trace2power ({e.msg})')
+        if saif_pass:
+            try: example.create_power_report('saif')
+            except TestError as e:
+                saif_pass = fail(e, f'saif: failed to create report ({e.msg})')
+    if 'tcl' in formats:
+        if trace2power:
+            try: example.process_vcd('tcl')
+            except TestError as e: tcl_pass = fail(e, f'failure in trace2power ({e.msg})')
+        if tcl_pass:
+            try: example.create_power_report('tcl')
+            except TestError as e: tcl_pass = fail(e, f'tcl: failed to create report ({e.msg})')
 
     with open(example.directory / 'out/power_report_vcd.txt', 'r') as f:
         vcd_report = f.read()
 
     reports = { 'vcd': vcd_report }
-    if tcl_pass:
+    if tcl_pass and 'tcl' in formats:
         with open(example.directory / 'out/power_report_tcl.txt', 'r') as f:
             tcl_report = f.read()
         reports['tcl'] = tcl_report
-    if saif_pass:
+    if saif_pass and 'saif' in formats:
         with open(example.directory / 'out/power_report_saif.txt', 'r') as f:
             saif_report = f.read()
         reports['saif'] = saif_report
@@ -367,7 +386,18 @@ def main():
 
     arg_parser = ArgumentParser()
     arg_parser.add_argument('project_name', type=str, nargs='*')
+    arg_parser.add_argument('-s', '--start-from', type=str)
+    arg_parser.add_argument('-f', '--formats', type=str, action='append')
     args = arg_parser.parse_args()
+
+    match args.start_from:
+        case None | 'synth': extra_opts = {}
+        case 'sim': extra_opts = {'synth': False}
+        case 'trace2power': extra_opts = {'synth': False, 'sim': False}
+        case 'sta': extra_opts = {'synth': False, 'sim': False, 'trace2power': False}
+        case _:
+            print(f'Invalid \'--start-from\' option: {args.start_from}')
+            exit(-1)
 
     tests_ok = True
 
@@ -377,7 +407,7 @@ def main():
         if len(args.project_name) != 0 and example.name not in args.project_name:
             continue
         print(f'{example.name}:', file=summary)
-        tests_ok &= test_example(example, summary)
+        tests_ok &= test_example(example, summary, formats=args.formats, **extra_opts)
 
     print(f'\nSUMMARY:\n{summary.getvalue()}')
     summary.close()

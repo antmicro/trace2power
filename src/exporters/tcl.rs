@@ -33,6 +33,12 @@ pub fn export<W>(
         let duty = (high_time as f64) / (time_end as f64);
         let activity = ((trans_count_doubled as f64) / 2.0_f64)
             / ((time_end as f64) * timescale_norm / ctx.clk_period);
+
+        //let pins = sig_names.into_iter()
+        //    .map(|n| n[ctx.scope_prefix_length..].replace('\\', ""))
+        //    .intersperse(" ".into())
+        //    .collect::<String>();
+
         writeln!(
             out,
             "  set_power_activity -pins \"{}\" -activity {} -duty {}",

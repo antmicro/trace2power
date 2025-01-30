@@ -27,6 +27,8 @@ struct Cli {
     top: Option<String>,
     #[arg(long)]
     top_scope: Option<String>,
+    #[arg(short, long)]
+    blackboxes_only: bool,
 }
 
 const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
@@ -79,7 +81,8 @@ struct Context {
     scope_prefix_length: usize,
     netlist: Option<Netlist>,
     top: String,
-    top_scope: Option<ScopeRef>
+    top_scope: Option<ScopeRef>,
+    blackboxes_only: bool
 }
 
 impl Context {
@@ -150,6 +153,7 @@ impl Context {
             }),
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
+            blackboxes_only: args.blackboxes_only
         }
     }
 }

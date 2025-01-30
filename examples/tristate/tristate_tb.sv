@@ -31,7 +31,7 @@ module tristate_tb();
 
   initial begin
     $dumpfile("tristate.vcd");
-    $dumpvars(1, tristate0);
+    $dumpvars(0, tristate0);
 
     repeat (10) begin
       cycle(0, 0);

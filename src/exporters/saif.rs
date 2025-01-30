@@ -38,6 +38,7 @@ where
     indent: usize,
     netlist: Option<&'n Netlist>,
     netlist_prefix: Vec<String>,
+    blackboxes_only: bool
 }
 
 #[derive(Copy, Clone)]
@@ -134,14 +135,22 @@ where
             .replace(']', "\\]");
 
         let mut instance_empty = true;
-        for var_ref in scope.vars(self.waveform.hierarchy()) {
-            if instance_empty {
-                self.begin_scope(format!("INSTANCE {name_escaped}").as_str())?;
-                self.begin_scope("NET")?;
-                instance_empty = false;
+
+        let export_nets = match (self.blackboxes_only, module) {
+            (false, _) => true,
+            (true, ModuleRef::BlackBox) => true,
+            _ => false
+        };
+        if export_nets {
+            for var_ref in scope.vars(self.waveform.hierarchy()) {
+                if instance_empty {
+                    self.begin_scope(format!("INSTANCE {name_escaped}").as_str())?;
+                    self.begin_scope("NET")?;
+                    instance_empty = false;
+                }
+                let var = self.waveform.hierarchy().get(var_ref);
+                self.visit_net(var)?;
             }
-            let var = self.waveform.hierarchy().get(var_ref);
-            self.visit_net(var)?;
         }
         if !instance_empty {
             self.end_scope()?; // NET
@@ -233,6 +242,7 @@ pub fn export<W>(
         indent: 1,
         netlist: ctx.netlist.as_ref(),
         netlist_prefix: Vec::new(),
+        blackboxes_only: ctx.blackboxes_only
     };
 
     match ctx.lookup_point {
