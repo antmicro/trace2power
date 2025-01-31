@@ -26,6 +26,7 @@ impl std::fmt::Display for DisplayTimescaleUnit {
     }
 }
 
+/// Holds SAIF exporter's state corresponding to a given scope
 struct ScopeCtx {
     name_escaped: String,
     instance_empty: bool,
@@ -151,8 +152,9 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent where W: std::io::Write {
         });
 
         // TODO: Scope export should be deferred until it's determined there's at least one
-        // net down the hierarchy tha should be exported. This is an overcomplicated hack that
-        // skips only one level of nesting.
+        // net down the hierarchy tha should be exported. The reason for that is to avoid exporting
+        // hierarhies of scopes that contain no relevant nets.
+        // This is an overcomplicated hack that deffers it only by one level of nesting.
 
         // Begin parent's scope if it was empty
         if let Some(ScopeCtx { ref instance_empty, name_escaped }) = self.get_parent_ctx_mut() {
@@ -177,8 +179,9 @@ pub fn export<W>(
 ) -> std::io::Result<()>
     where W: std::io::Write
 {
+    let hier = ctx.wave.hierarchy();
     let time_end = *ctx.wave.time_table().last().unwrap();
-    let timescale = ctx.wave.hierarchy().timescale().unwrap();
+    let timescale = hier.timescale().unwrap();
 
     write!(
         out,
@@ -202,13 +205,10 @@ pub fn export<W>(
     )?;
 
     let netlist_root = match ctx.top_scope {
-        Some(scope_ref) => {
-            let scope = ctx.wave.hierarchy().get(scope_ref);
-            scope.full_name(ctx.wave.hierarchy())
-                .split('.')
-                .map(String::from)
-                .collect::<Vec<_>>()
-        },
+        Some(scope_ref) => hier.get(scope_ref).full_name(hier)
+            .split('.')
+            .map(String::from)
+            .collect::<Vec<_>>(),
         None => Vec::new()
     };
 
@@ -224,7 +224,7 @@ pub fn export<W>(
     };
 
     let mut agent = SaifAgent::new(ctx.stats, 1);
-    agent.visit_netlist(ctx.lookup_point, &mut visitor_ctx)?;
+    agent.visit_hierarchy(ctx.lookup_point, &mut visitor_ctx)?;
 
     write!(out, ")\n")?;
 

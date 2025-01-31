@@ -1,3 +1,5 @@
+// Structs for deserializing yosys netlists
+
 use serde::Deserialize;
 use std::collections::HashMap;
 

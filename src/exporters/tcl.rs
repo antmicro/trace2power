@@ -1,5 +1,4 @@
 use std::{collections::HashMap, hash::Hash};
-use itertools::*;
 use wellen::{VarRef, GetItem};
 
 use crate::stats::{PackedStats, SignalStats};
@@ -8,6 +7,7 @@ use crate::{HashVarRef, LookupPoint};
 use super::{TraceVisitorAgent, TraceVisit, TraceVisitCtx};
 
 
+/// Minimal stats, used for Tcl export, hashable to allow grouping
 #[derive(Hash, Eq, PartialEq)]
 struct TclStat {
     high_time: u32,
@@ -91,16 +91,14 @@ pub fn export<W>(
 ) -> std::io::Result<()>
     where W: std::io::Write
 {
+    let hier = ctx.wave.hierarchy();
     let time_end = *ctx.wave.time_table().last().unwrap();
 
     let netlist_root = match ctx.top_scope {
-        Some(scope_ref) => {
-            let scope = ctx.wave.hierarchy().get(scope_ref);
-            scope.full_name(ctx.wave.hierarchy())
-                .split('.')
-                .map(String::from)
-                .collect::<Vec<_>>()
-        },
+        Some(scope_ref) => hier.get(scope_ref).full_name(hier)
+            .split('.')
+            .map(String::from)
+            .collect::<Vec<_>>(),
         None => Vec::new()
     };
 
@@ -122,7 +120,7 @@ pub fn export<W>(
         scope.pop();
         agent.scope = scope;
     }
-    agent.visit_netlist(ctx.lookup_point, &mut visitor_ctx)?;
+    agent.visit_hierarchy(ctx.lookup_point, &mut visitor_ctx)?;
 
     let timescale = ctx.wave.hierarchy().timescale().unwrap();
     let timescale_norm =
@@ -137,10 +135,11 @@ pub fn export<W>(
         writeln!(
             out,
             "  set_power_activity -pins \"{}\" -activity {} -duty {}",
-            pins.into_iter()
-                .map(|n| n[ctx.scope_prefix_length..].replace('\\', "").replace('$', "\\$"))
-                .intersperse(" ".into())
-                .collect::<String>(),
+            itertools::Itertools::intersperse(
+                pins.into_iter()
+                    .map(|n| n[ctx.scope_prefix_length..].replace('\\', "").replace('$', "\\$")),
+                " ".into()
+            ).collect::<String>(),
             activity,
             duty
         )?;

@@ -6,14 +6,16 @@ use std::collections::HashMap;
 
 use clap::Parser;
 use stats::PackedStats;
-use wellen::{self, simple::Waveform, GetItem, Hierarchy, Scope, ScopeRef, Var, VarRef};
+use wellen::{self, simple::Waveform, GetItem, Hierarchy, ScopeRef, Var, VarRef};
 use rayon::prelude::*;
 
+pub mod util;
 pub mod stats;
 pub mod netlist;
 mod exporters;
 
 use netlist::Netlist;
+use util::VarRefsIter;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct HashVarRef(VarRef);
@@ -24,25 +26,40 @@ impl std::hash::Hash for HashVarRef {
     }
 }
 
+/// trace2power - Extract acccumulated power activity data from VCD/FST
 #[derive(Parser)]
 struct Cli {
+    /// Trace file
     input_file: std::path::PathBuf,
+    /// Clock frequency (in Hz)
     #[arg(short, long, value_parser = clap::value_parser!(f64))]
     clk_freq: f64,
-    #[arg(long, default_value = "tcl")]
-    output_format: String,
+    /// Format to extract data into
+    #[arg(short = 'f', long, default_value = "tcl")]
+    output_format: OutputFormat,
+    /// Scope in which signals should be looked for. By default it's the global hierarchy scope.
     #[arg(long, short)]
     limit_scope: Option<String>,
-    #[arg(long)]
-    netlist: Option<String>,
-    #[arg(long)]
+    /// Yosys JSON netlist of DUT. Can be used to identify ports of primitives when exporting data.
+    /// Allows skipping unnecessary or unwanted signals
+    #[arg(short, long)]
+    netlist: Option<std::path::PathBuf>,
+    /// Name of the top module (DUT)
+    #[arg(short, long)]
     top: Option<String>,
-    #[arg(long)]
+    /// Scope at which the DUT is located. The loaded netlist will be rooted at this point.
+    #[arg(short = 'T', long)]
     top_scope: Option<String>,
+    /// Export only nets from blackboxes (undefined modules) in provided netlist. Those are assumed
+    /// to be post-synthesis primitives
     #[arg(short, long)]
     blackboxes_only: bool,
+    /// Remove nets that are in blackboxes and have suspicious names: "VGND", "VNB", "VPB", "VPWR".
     #[arg(long)]
     remove_virtual_pins: bool,
+    /// Write the output to a specified file instead of stdout.
+    #[arg(short, long)]
+    output: Option<std::path::PathBuf>
 }
 
 const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
@@ -57,19 +74,35 @@ fn indexed_name(mut name: String, variable: &Var) -> String {
     name
 }
 
-fn get_scope(hier: &Hierarchy, scope_str: &str) -> Option<ScopeRef> {
+fn get_scope_by_full_name(hier: &Hierarchy, scope_str: &str) -> Option<ScopeRef> {
     hier.lookup_scope(scope_str.split('.').collect::<Vec<_>>().as_slice())
 }
 
+/// Represents a pointin hierarchy - either a scope or top-level hierarchy as they are distinct for
+/// some reason
 #[derive(Copy, Clone)]
 enum LookupPoint {
     Top,
     Scope(ScopeRef)
 }
 
+#[derive(Copy, Clone)]
 enum OutputFormat {
     Tcl,
     Saif
+}
+
+impl clap::ValueEnum for OutputFormat {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Tcl, Self::Saif]
+    }
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        use clap::builder::PossibleValue;
+        match self {
+            Self::Tcl => Some(PossibleValue::new("tcl")),
+            Self::Saif => Some(PossibleValue::new("saif")),
+        }
+    }
 }
 
 impl FromStr for OutputFormat {
@@ -83,59 +116,6 @@ impl FromStr for OutputFormat {
                 format!("Format {} is not a valid output format forthis program", other)
             )),
         }
-    }
-}
-
-// Wellen has no good iterator over ALL VarRefs, so I made one. The generics are here to deal with
-// hidden iterator types.
-struct VarRefIterator<'w, HIter, SIter, F, S>
-where
-    HIter: Iterator<Item = VarRef> + 'w,
-    SIter: Iterator<Item = ScopeRef> + 'w,
-    F: Fn(&'w Scope) -> HIter,
-    S: Fn(&'w Scope) -> SIter
-{
-    hierarchy: &'w Hierarchy,
-    get_iter_of_scope: F,
-    get_siter_of_scope: S,
-    scopes: Vec<&'w Scope>,
-    iter: HIter,
-    siter: SIter,
-}
-
-impl<'w, HIter, SIter, F, S> Iterator for VarRefIterator<'w, HIter, SIter, F, S>
-where
-    HIter: Iterator<Item = VarRef> + 'w,
-    SIter: Iterator<Item = ScopeRef> + 'w,
-    F: Fn(&'w Scope) -> HIter,
-    S: Fn(&'w Scope) -> SIter
-{
-    type Item = VarRef;
-    fn next(&mut self) -> Option<Self::Item> {
-        match self.iter.next() {
-            Some(v) => Some(v),
-            None => {
-                if let Some(scope) = self.scopes.pop() {
-                    self.iter = (self.get_iter_of_scope)(scope);
-                    self.siter = (self.get_siter_of_scope)(scope);
-                    self.scopes.extend(self.siter.by_ref().map(|s| self.hierarchy.get(s)));
-                    self.next()
-                } else {
-                    None
-                }
-            }
-        }
-    }
-}
-
-fn var_refs_iter<'h>(hierarchy: &'h Hierarchy) -> impl Iterator<Item = VarRef> + 'h {
-    VarRefIterator {
-        hierarchy: &hierarchy,
-        scopes: hierarchy.scopes().map(|s| hierarchy.get(s)).collect(),
-        get_iter_of_scope: |s: &Scope| s.vars(hierarchy),
-        get_siter_of_scope: |s: &Scope| s.scopes(hierarchy),
-        iter: hierarchy.vars(),
-        siter: hierarchy.scopes(),
     }
 }
 
@@ -155,7 +135,10 @@ struct Context {
 
 impl Context {
     fn build_from_args(args: &Cli) -> Self {
-        let output_fmt = OutputFormat::from_str(&args.output_format).unwrap();
+        const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
+            multi_thread: true,
+            remove_scopes_with_empty_name: false,
+        };
 
         let mut wave =
             wellen::simple::read_with_options(args.input_file.to_str().unwrap(), &LOAD_OPTS)
@@ -164,14 +147,9 @@ impl Context {
         let lookup_point = match &args.limit_scope {
             None => LookupPoint::Top,
             Some(scope_str) => LookupPoint::Scope(
-                get_scope(wave.hierarchy(), scope_str).expect("Requested scope not found")
+                get_scope_by_full_name(wave.hierarchy(), scope_str).expect("Requested scope not found")
             ),
         };
-
-
-        if let (LookupPoint::Scope(_), OutputFormat::Saif) = (&lookup_point, &output_fmt) {
-            panic!("Scoped lookup for SAIF is WIP");
-        }
 
         let lookup_scope_name_prefix = match lookup_point {
             LookupPoint::Top => "".to_string(),
@@ -182,10 +160,10 @@ impl Context {
         };
 
         let (all_vars, all_signals): (Vec<_>, Vec<_>) = match lookup_point {
-            LookupPoint::Top => var_refs_iter(wave.hierarchy())
+            LookupPoint::Top => wave.hierarchy().var_refs_iter()
                 .map(|var_ref| (var_ref, wave.hierarchy().get(var_ref).signal_ref()))
                 .unzip(),
-            LookupPoint::Scope(_) => var_refs_iter(wave.hierarchy())
+            LookupPoint::Scope(_) => wave.hierarchy().var_refs_iter()
                 .map(|var_ref| (var_ref, wave.hierarchy().get(var_ref)))
                 .filter(|(_, var)| {
                     let fname = indexed_name(var.full_name(wave.hierarchy().into()), var);
@@ -212,17 +190,16 @@ impl Context {
         let clk_period = 1.0_f64 / args.clk_freq;
 
         let top_scope = args.top_scope.as_ref()
-            .map(|path| path.split('.').collect::<Vec<_>>())
-            .map(|scope| wave.hierarchy().lookup_scope(&scope)
-                .unwrap_or_else(|| panic!("Couldn't find top scope `{}`", scope.join(".")))
-            );
+            .map(|s| get_scope_by_full_name(wave.hierarchy(), s)
+                .unwrap_or_else(|| panic!("Couldn't find top scope `{}`", s))
+        );
 
         Self {
             wave,
             clk_period,
             stats: stats,
             lookup_point,
-            output_fmt,
+            output_fmt: args.output_format,
             scope_prefix_length: lookup_scope_name_prefix.len(),
             netlist: args.netlist.as_ref().map(|path| {
                 let f = std::fs::File::open(path).expect("Couldn't open the netlist file");
@@ -238,8 +215,7 @@ impl Context {
     }
 }
 
-fn process_trace(ctx: Context) {
-    let out = std::io::stdout();
+fn process_trace<W>(ctx: Context, out: W) where W: std::io::Write {
     match &ctx.output_fmt {
         OutputFormat::Tcl => exporters::tcl::export(ctx, out),
         OutputFormat::Saif => exporters::saif::export(ctx, out),
@@ -247,6 +223,14 @@ fn process_trace(ctx: Context) {
 }
 
 fn main() {
-    let ctx = Context::build_from_args(&Cli::parse());
-    process_trace(ctx);
+    let args = Cli::parse();
+    let ctx = Context::build_from_args(&args);
+    match args.output {
+        None => process_trace(ctx, std::io::stdout()),
+        Some(path) => {
+            let f = std::fs::File::create(path).unwrap();
+            let writer = std::io::BufWriter::new(f);
+            process_trace(ctx, writer);
+        }
+    }
 }
