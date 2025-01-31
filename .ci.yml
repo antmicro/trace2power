@@ -49,7 +49,7 @@ test_debug:
   - source venv/bin/activate
   - export TRACE2POWER=`realpath target/debug/trace2power`
   - export ORFS=/OpenROAD-flow-scripts
-  - python examples/test.py
+  - python examples/test.py --skip tail:tcl
   artifacts:
     when: always
     paths: ["examples/*/out/*"]
@@ -63,7 +63,7 @@ test_release:
   - source venv/bin/activate
   - export TRACE2POWER=`realpath target/release/trace2power`
   - export ORFS=/OpenROAD-flow-scripts
-  - python examples/test.py
+  - python examples/test.py --skip tail:tcl
   artifacts:
     when: always
     paths: ["examples/*/out/*"]

@@ -2,7 +2,7 @@ import subprocess
 from pathlib import Path
 import os
 import shutil
-from typing import Literal, Optional
+from typing import Iterable, Literal, Optional
 import colorama
 import re
 from argparse import ArgumentParser
@@ -255,19 +255,17 @@ def check_report_match(name: str, reference: str, out, **reports: str) -> bool:
                 file=out
             )
 
-    return reports_differ
+    return not reports_differ
 
 
 def test_example(
     example: Project,
     summary,
+    formats: Iterable[str],
     synth: bool = True,
     sim: bool = True,
     trace2power: bool = True,
-    formats: Optional[set[str]] = None,
 ) -> bool:
-    if formats is None: formats = {'saif', 'tcl'}
-
     print(
         f'{colorama.Back.CYAN}Tesing example {example.name}{colorama.Back.RESET}', flush=True
     )
@@ -281,6 +279,7 @@ def test_example(
     tcl_pass = True
 
     def fail(err: TestError, summary_msg: str) -> bool:
+        nonlocal test_pass
         print(f'ERROR ({example.name}): {e.pretty()}')
         print(f'* {colorama.Fore.RED}✘{colorama.Fore.RESET} {summary_msg}', file=summary)
         test_pass = False
@@ -346,12 +345,14 @@ def test_example(
             saif_report = f.read()
         reports['saif'] = saif_report
 
-    return check_report_match(
+    reports_match = check_report_match(
         name=example.name,
         reference='vcd',
         out=summary,
         **reports
-    ) and test_pass
+    )
+
+    return reports_match and test_pass
 
 def main():
     examples = [
@@ -371,7 +372,7 @@ def main():
             top='tristate',
             scope='tristate_tb/tristate0'
         ),
-        # Warning OpenSTA @ aa598a2 doe snot read glitch activities in SAFI files equivalently
+        # Warning OpenSTA @ aa598a2 does not read glitch activities in SAFI files equivalently
         # to reads from VCDs.
         Project(
             name='hierarchical',
@@ -396,6 +397,7 @@ def main():
     arg_parser.add_argument('project_name', type=str, nargs='*')
     arg_parser.add_argument('-s', '--start-from', type=str)
     arg_parser.add_argument('-f', '--formats', type=str, action='append')
+    arg_parser.add_argument('--skip', type=str, action='append', default=[])
     args = arg_parser.parse_args()
 
     match args.start_from:
@@ -407,6 +409,14 @@ def main():
             print(f'Invalid \'--start-from\' option: {args.start_from}')
             exit(-1)
 
+    skips = {}
+    for s in args.skip:
+        tup = s.split(':')
+        fmts = [tup[1]] if len(tup) > 1 else ['tcl', 'saif']
+        if skips.get(tup[0]) is None:
+            skips[tup[0]] = []
+        skips[tup[0]] += fmts
+
     tests_ok = True
 
     summary = io.StringIO()
@@ -414,8 +424,20 @@ def main():
     for example in examples:
         if len(args.project_name) != 0 and example.name not in args.project_name:
             continue
+
+        formats = args.formats if args.formats is not None else ['saif', 'tcl']
+        skip_fmts = skips.get(example.name)
+        if skip_fmts is None: skip_fmts = []
+        for fmt in skip_fmts: formats.remove(fmt)
+
         print(f'{example.name}:', file=summary)
-        tests_ok &= test_example(example, summary, formats=args.formats, **extra_opts)
+        tests_ok &= test_example(example, summary, formats, **extra_opts)
+
+        for fmt in skip_fmts:
+            print(
+                f'* {colorama.Fore.YELLOW}✘{colorama.Fore.RESET} {fmt}: SKIPPED',
+                file=summary
+            )
 
     print(f'\nSUMMARY:\n{summary.getvalue()}')
     summary.close()
