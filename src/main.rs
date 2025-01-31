@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use clap::Parser;
 use stats::PackedStats;
-use wellen::{self, simple::Waveform, GetItem, Hierarchy, Scope, ScopeRef, SignalRef, Var, VarRef};
+use wellen::{self, simple::Waveform, GetItem, Hierarchy, Scope, ScopeRef, Var, VarRef};
 use rayon::prelude::*;
 
 pub mod stats;
@@ -41,6 +41,8 @@ struct Cli {
     top_scope: Option<String>,
     #[arg(short, long)]
     blackboxes_only: bool,
+    #[arg(long)]
+    remove_virtual_pins: bool,
 }
 
 const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
@@ -147,7 +149,8 @@ struct Context {
     netlist: Option<Netlist>,
     top: String,
     top_scope: Option<ScopeRef>,
-    blackboxes_only: bool
+    blackboxes_only: bool,
+    remove_virtual_pins: bool
 }
 
 impl Context {
@@ -229,7 +232,8 @@ impl Context {
             }),
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
-            blackboxes_only: args.blackboxes_only
+            blackboxes_only: args.blackboxes_only,
+            remove_virtual_pins: args.remove_virtual_pins
         }
     }
 }

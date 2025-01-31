@@ -1,8 +1,5 @@
-use std::collections::HashMap;
 use itertools::izip;
-use wellen::{simple::Waveform, Signal, SignalValue, TimeTableIdx, GetItem};
-
-use crate::{HashVarRef, LookupPoint};
+use wellen::{Signal, SignalValue, TimeTableIdx};
 
 #[derive(Debug, Clone)]
 pub struct SignalStats {

@@ -22,7 +22,8 @@ struct TraceVisitCtx<'b, 'w, 'n, W> where W: std::io::Write {
     top_module: String,
     netlist: Option<&'n Netlist>,
     netlist_prefix: Vec<String>,
-    blackboxes_only: bool
+    blackboxes_only: bool,
+    remove_virtual_pins: bool,
 }
 
 trait TraceVisitorAgent<'w, W> where W: Write {
@@ -98,7 +99,9 @@ where
     {
         self.enter_scope(ctx, scope)?;
 
-        let name = scope.name(ctx.waveform.hierarchy());
+        let hier = ctx.waveform.hierarchy();
+
+        let name = scope.name(hier);
 
         if let ModuleRef::OutsideNetlist = parent_module {
             ctx.netlist_prefix.push(name.to_string());
@@ -112,14 +115,22 @@ where
             _ => false
         };
         if export_nets {
-            for var_ref in scope.vars(ctx.waveform.hierarchy()) {
+            for var_ref in scope.vars(hier) {
+                if let ModuleRef::BlackBox = module {
+                    if ctx.remove_virtual_pins {
+                        let var = hier.get(var_ref);
+                        if let "VGND" | "VNB" | "VPB" | "VPWR" = var.name(hier) {
+                            continue;
+                        }
+                    }
+                }
                 self.enter_net(ctx, var_ref)?;
             }
         }
         self.end_nets(ctx)?;
         if let ModuleRef::BlackBox = module { /* Do not descend blackboxes */ } else {
-            for scope_ref in scope.scopes(ctx.waveform.hierarchy()) {
-                let scope = ctx.waveform.hierarchy().get(scope_ref);
+            for scope_ref in scope.scopes(hier) {
+                let scope = hier.get(scope_ref);
                 self.visit_scope(ctx, scope, module)?;
             }
         }

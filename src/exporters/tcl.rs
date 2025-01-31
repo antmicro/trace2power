@@ -111,7 +111,8 @@ pub fn export<W>(
         top_module: ctx.top,
         netlist: ctx.netlist.as_ref(),
         netlist_prefix: Vec::new(),
-        blackboxes_only: ctx.blackboxes_only
+        blackboxes_only: ctx.blackboxes_only,
+        remove_virtual_pins: ctx.remove_virtual_pins,
     };
 
     let mut agent = TclAgent::new(ctx.stats);

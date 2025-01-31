@@ -308,7 +308,8 @@ def test_example(
                         '--netlist', str(example.path_netlist),
                         '--top', example.top,
                         '--top-scope', example.scope.replace('/', '.'),
-                        '--blackboxes-only'
+                        '--blackboxes-only',
+                        '--remove-virtual-pins'
                     ]
                 )
             except TestError as e: saif_pass = fail(e, f'failure in trace2power ({e.msg})')
@@ -324,7 +325,8 @@ def test_example(
                     '--netlist', str(example.path_netlist),
                     '--top', example.top,
                     '--top-scope', example.scope.replace('/', '.'),
-                    '--blackboxes-only'
+                    '--blackboxes-only',
+                    '--remove-virtual-pins'
                     ]
                 )
             except TestError as e: tcl_pass = fail(e, f'failure in trace2power ({e.msg})')

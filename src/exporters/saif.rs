@@ -2,12 +2,11 @@ use chrono::Utc;
 use std::collections::HashMap;
 use indoc::indoc;
 use wellen::{GetItem, TimescaleUnit, Scope, VarRef};
-use rayon::prelude::*;
-use crate::{indexed_name, Context, LookupPoint};
-use crate::stats::{calc_stats, PackedStats, SignalStats};
+use crate::{indexed_name, Context};
+use crate::stats::{PackedStats, SignalStats};
 
 use crate::HashVarRef;
-use super::{TraceVisitorAgent, TraceVisit, TraceVisitCtx, ModuleRef};
+use super::{TraceVisitorAgent, TraceVisit, TraceVisitCtx};
 
 struct DisplayTimescaleUnit(TimescaleUnit);
 
@@ -220,7 +219,8 @@ pub fn export<W>(
         top_module: ctx.top,
         netlist: ctx.netlist.as_ref(),
         netlist_prefix: Vec::new(),
-        blackboxes_only: ctx.blackboxes_only
+        blackboxes_only: ctx.blackboxes_only,
+        remove_virtual_pins: ctx.remove_virtual_pins,
     };
 
     let mut agent = SaifAgent::new(ctx.stats, 1);
