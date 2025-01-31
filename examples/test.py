@@ -319,7 +319,15 @@ def test_example(
                 saif_pass = fail(e, f'saif: failed to create report ({e.msg})')
     if 'tcl' in formats:
         if trace2power:
-            try: example.process_vcd('tcl')
+            try: example.process_vcd(
+                'tcl',
+                extra_args=[
+                    '--netlist', str(example.path_netlist),
+                    '--top', example.top,
+                    '--top-scope', example.scope.replace('/', '.'),
+                    '--blackboxes-only'
+                    ]
+                )
             except TestError as e: tcl_pass = fail(e, f'failure in trace2power ({e.msg})')
         if tcl_pass:
             try: example.create_power_report('tcl')

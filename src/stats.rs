@@ -1,9 +1,12 @@
+use std::collections::HashMap;
 use itertools::izip;
-use wellen::{Signal, SignalValue, TimeTableIdx};
+use wellen::{simple::Waveform, Signal, SignalValue, TimeTableIdx, GetItem};
+
+use crate::{HashVarRef, LookupPoint};
 
 #[derive(Debug, Clone)]
 pub struct SignalStats {
-    pub name: String,
+    //pub name: String,
     pub trans_count_doubled: u32,
     pub clean_trans_count: u32,
     pub glitch_trans_count: u32,
@@ -11,6 +14,20 @@ pub struct SignalStats {
     pub low_time: u32,
     pub x_time: u32,
     pub z_time: u32,
+}
+
+impl Default for SignalStats {
+    fn default() -> Self {
+        Self {
+            trans_count_doubled: 0,
+            clean_trans_count: 0,
+            glitch_trans_count: 0,
+            high_time: 0,
+            low_time: 0,
+            x_time: 0,
+            z_time: 0,
+        }
+    }
 }
 
 impl SignalStats {
@@ -30,32 +47,18 @@ fn val_at(ti: TimeTableIdx, sig: &Signal) -> (SignalValue, TimeTableIdx) {
     (sig.get_value_at(&offset, 0), sig.get_time_idx_at(&offset))
 }
 
-pub fn calc_stats(sig: &Signal, name: String, time_end: wellen::Time) -> Vec<SignalStats> {
+pub fn calc_stats(sig: &Signal, time_end: wellen::Time) -> PackedStats {
     let n = sig.time_indices().len();
     if n == 0 {
-        return vec![];
+        return PackedStats::Vector(Vec::new());
     }
 
     let (mut prev_val, mut prev_ts) = val_at(sig.get_first_time_idx().unwrap(), sig);
     let bit_len = prev_val.bits().unwrap();
     let mut ss = Vec::<SignalStats>::with_capacity(bit_len as usize);
-    for i in 0..bit_len {
-        ss.push(SignalStats {
-            name: name.clone()
-                + (if bit_len > 1 {
-                    format!("[{}]", i)
-                } else {
-                    "".into()
-                })
-                .as_ref(),
-            trans_count_doubled: 0,
-            clean_trans_count: 0,
-            glitch_trans_count: 0,
-            high_time: 0,
-            low_time: 0,
-            x_time: 0,
-            z_time: 0,
-        })
+    // TODO: Consider rev on range
+    for _ in 0..bit_len {
+        ss.push(Default::default())
     }
 
     for time_idx in sig.time_indices().iter() {
@@ -96,5 +99,14 @@ pub fn calc_stats(sig: &Signal, name: String, time_end: wellen::Time) -> Vec<Sig
     // TODO: Figure out how the indexing direction is denoted
     ss.reverse();
 
-    return ss;
+    return if ss.len() == 1 {
+        PackedStats::OneBit(ss.into_iter().next().unwrap())
+    } else {
+        PackedStats::Vector(ss)
+    }
+}
+
+pub enum PackedStats {
+    OneBit(SignalStats),
+    Vector(Vec<SignalStats>)
 }

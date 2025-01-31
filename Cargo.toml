@@ -4,7 +4,7 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-wellen = "^0.10.1"
+wellen = "^0.12.2"
 rayon = "1.10.0"
 itertools = "0.13.0"
 clap = { version = "4.5.9", features = ["derive", "cargo"] }

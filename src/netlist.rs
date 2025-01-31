@@ -1,12 +1,12 @@
 use serde::Deserialize;
 use std::collections::HashMap;
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Module {
     pub cells: HashMap<String, Cell>
 }
 
-#[derive(Deserialize)]
+#[derive(Debug, Deserialize)]
 pub struct Cell {
     #[serde(rename = "type")]
     pub type_name: String
