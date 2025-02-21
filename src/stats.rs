@@ -51,7 +51,17 @@ pub fn calc_stats(sig: &Signal, time_end: wellen::Time) -> PackedStats {
     }
 
     let (mut prev_val, mut prev_ts) = val_at(sig.get_first_time_idx().unwrap(), sig);
-    let bit_len = prev_val.bits().unwrap();
+    
+    let bits = prev_val.bits();
+
+    // Check if bits are valid, otherwise value is a real number
+    if bits == None {
+        // TODO: add function handling real numbers
+        return PackedStats::Vector(Vec::new());
+    }
+
+    let bit_len = bits.unwrap();
+
     let mut ss = Vec::<SignalStats>::with_capacity(bit_len as usize);
     // TODO: Consider rev on range
     for _ in 0..bit_len {
