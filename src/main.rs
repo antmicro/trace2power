@@ -62,11 +62,6 @@ struct Cli {
     output: Option<std::path::PathBuf>
 }
 
-const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
-    multi_thread: true,
-    remove_scopes_with_empty_name: false,
-};
-
 fn indexed_name(mut name: String, variable: &Var) -> String {
     if let Some(idx) = variable.index() {
         name += format!("[{}]", idx.lsb()).as_str();
