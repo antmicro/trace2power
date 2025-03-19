@@ -24,15 +24,17 @@ impl From<&SignalStats> for TclStat {
 }
 
 struct TclAgent {
-    stats: HashMap<HashVarRef, PackedStats>,
+    stats: HashMap<HashVarRef, Vec<PackedStats>>,
+    span_index: usize,
     grouped_stats: HashMap<TclStat, Vec<String>>,
     scope: Vec<String>,
 }
 
 impl TclAgent {
-    fn new(stats: HashMap<HashVarRef, PackedStats>) -> Self {
+    fn new(stats: HashMap<HashVarRef, Vec<PackedStats>>, span_index: usize) -> Self {
         Self {
             stats,
+            span_index,
             grouped_stats: HashMap::new(),
             scope: Vec::new()
         }
@@ -56,13 +58,13 @@ impl<'w, W> TraceVisitorAgent<'w, W> for TclAgent where W: std::io::Write {
             net.name(ctx.waveform.hierarchy())
         );
 
-        match stats {
-            PackedStats::OneBit(stat) => {
-                self.grouped_stats.entry(TclStat::from(stat))
+        match &stats[self.span_index] {
+            PackedStats::OneBit{duration, stats} => {
+                self.grouped_stats.entry(TclStat::from(stats))
                     .or_insert_with(|| vec![])
                     .push(fname);
             },
-            PackedStats::Vector(stats) => for (idx, stat) in stats.iter().enumerate() {
+            PackedStats::Vector{duration, stats} => for (idx, stat) in stats.iter().enumerate() {
                 self.grouped_stats.entry(TclStat::from(stat))
                     .or_insert_with(|| vec![])
                     .push(format!("{}[{}]", fname, idx));
@@ -113,7 +115,7 @@ pub fn export<W>(
         remove_virtual_pins: ctx.remove_virtual_pins,
     };
 
-    let mut agent = TclAgent::new(ctx.stats);
+    let mut agent = TclAgent::new(ctx.stats, 0);
     if let LookupPoint::Scope(scope_ref) = ctx.lookup_point {
         let scope_name = ctx.wave.hierarchy().get(scope_ref).full_name(ctx.wave.hierarchy());
         let mut scope: Vec<_> = scope_name.split('.').map(ToString::to_string).collect();

@@ -1,3 +1,5 @@
+use core::num;
+
 use itertools::izip;
 use wellen::{Signal, simple::Waveform, SignalValue, TimeTableIdx};
 
@@ -49,21 +51,33 @@ fn time_value_at(wave: &Waveform, ti: TimeTableIdx) -> u64 {
     return time_stamp;
 }
 
-pub fn calc_stats(wave: &Waveform, sig: &Signal, span_index: u32, first_time_stamp: wellen::Time, last_time_stamp: wellen::Time) -> PackedStats {
+pub fn calc_stats_temp(wave: &Waveform, sig: &Signal, num_of_iterations: u64) -> Vec<PackedStats> {
+    let mut stats = Vec::new();
+    let time_span = (*wave.time_table().last().unwrap()) / num_of_iterations;
+
+    for index in 0..num_of_iterations {
+        let first_time_stamp = index * time_span;
+        let last_time_stamp = (index + 1) * time_span;
+        stats.push(calc_stats(wave, sig, first_time_stamp, last_time_stamp));
+    }
+
+    return stats;
+}
+
+pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time, last_time_stamp: wellen::Time) -> PackedStats {
     let n = sig.time_indices().len();
     if n == 0 {
-        return PackedStats::Vector(Vec::new());
+        return PackedStats::Vector{duration: 0, stats: Vec::new()};
     }
 
     let mut prev_val = val_at(sig.get_first_time_idx().unwrap(), sig);
-    let mut prev_ts = time_value_at(wave, sig.get_first_time_idx().unwrap());
-
+    
     let bits = prev_val.bits();
-
+    
     // Check if bits are valid, otherwise value is a real number
     if bits == None {
         // TODO: add function handling real numbers
-        return PackedStats::Vector(Vec::new());
+        return PackedStats::Vector{duration: 0, stats: Vec::new()};
     }
 
     let bit_len = bits.unwrap();
@@ -74,15 +88,31 @@ pub fn calc_stats(wave: &Waveform, sig: &Signal, span_index: u32, first_time_sta
         ss.push(Default::default())
     }
     
-    for time_idx in sig.time_indices().iter() {
-        let val = val_at(*time_idx, sig);
-        let ts = time_value_at(wave, *time_idx);
-     
-        if ts < first_time_stamp {
-            prev_ts = ts;
-            prev_val = val;
-            continue;
+    let mut current_value_entry_index: usize = 1;
+
+    // Fast forward to relevant starting time stamp
+    while current_value_entry_index < sig.time_indices().len() {
+        let time_idx = sig.time_indices()[current_value_entry_index];
+        
+        if time_value_at(wave, time_idx) > first_time_stamp {
+            break;
         }
+        
+        prev_val = val_at(time_idx, sig);
+        
+        current_value_entry_index += 1;
+    }
+
+    // For high time calculations to start from specified first time stamp
+    let mut prev_ts = first_time_stamp;
+    
+    // Accumulate statistics over specified time span
+    while current_value_entry_index < sig.time_indices().len() {
+        let time_idx = sig.time_indices()[current_value_entry_index];
+        let val = val_at(time_idx, sig);
+        let ts = time_value_at(wave, time_idx);
+        current_value_entry_index += 1;
+
         if ts > last_time_stamp {
             break;
         }
@@ -124,13 +154,13 @@ pub fn calc_stats(wave: &Waveform, sig: &Signal, span_index: u32, first_time_sta
     ss.reverse();
 
     return if ss.len() == 1 {
-        PackedStats::OneBit(ss.into_iter().next().unwrap())
+        PackedStats::OneBit{duration: last_time_stamp - first_time_stamp, stats: ss.into_iter().next().unwrap()}
     } else {
-        PackedStats::Vector(ss)
+        PackedStats::Vector{duration: last_time_stamp - first_time_stamp, stats: ss}
     }
 }
 
 pub enum PackedStats {
-    OneBit(SignalStats),
-    Vector(Vec<SignalStats>)
+    OneBit{duration: u64, stats: SignalStats},
+    Vector{duration: u64, stats: Vec<SignalStats>}
 }

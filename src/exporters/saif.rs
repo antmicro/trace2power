@@ -33,15 +33,17 @@ struct ScopeCtx {
 }
 
 struct SaifAgent {
-    stats: HashMap<HashVarRef, PackedStats>,
+    stats: HashMap<HashVarRef, Vec<PackedStats>>,
+    span_index: usize,
     scope_ctx: Vec<ScopeCtx>,
     indent: usize
 }
 
 impl SaifAgent {
-    fn new(stats: HashMap<HashVarRef, PackedStats>, indent: usize) -> Self {
+    fn new(stats: HashMap<HashVarRef, Vec<PackedStats>>, span_index: usize, indent: usize) -> Self {
         Self {
             stats,
+            span_index,
             scope_ctx: Vec::new(),
             indent,
         }
@@ -118,13 +120,13 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent where W: std::io::Write {
             self.get_ctx_mut().instance_empty = false;
         }
 
-        let my_stats = &self.stats[&HashVarRef(var_ref)];
+        let my_stats = &self.stats[&HashVarRef(var_ref)][self.span_index];
         match my_stats {
-            PackedStats::OneBit(stat) => {
+            PackedStats::OneBit{duration, stats} => {
                 let name = indexed_name(net.name(ctx.waveform.hierarchy()).into(), net);
-                self.write_net_stat(ctx, name, stat)?;
+                self.write_net_stat(ctx, name, stats)?;
             }
-            PackedStats::Vector(stats) => for (idx, stat) in stats.iter().enumerate() {
+            PackedStats::Vector{duration, stats} => for (idx, stat) in stats.iter().enumerate() {
                 let name = format!("{}[{}]", net.name(ctx.waveform.hierarchy()), idx);
                 self.write_net_stat(ctx, name, stat)?;
             }
@@ -223,7 +225,7 @@ pub fn export<W>(
         remove_virtual_pins: ctx.remove_virtual_pins,
     };
 
-    let mut agent = SaifAgent::new(ctx.stats, 1);
+    let mut agent = SaifAgent::new(ctx.stats, 0, 1);
     agent.visit_hierarchy(ctx.lookup_point, &mut visitor_ctx)?;
 
     write!(out, ")\n")?;

@@ -120,7 +120,7 @@ impl FromStr for OutputFormat {
 struct Context {
     wave: Waveform,
     clk_period: f64,
-    stats: HashMap<HashVarRef, PackedStats>,
+    stats: HashMap<HashVarRef, Vec<PackedStats>>,
     lookup_point: LookupPoint,
     output_fmt: OutputFormat,
     scope_prefix_length: usize,
@@ -174,17 +174,18 @@ impl Context {
 
         wave.load_signals_multi_threaded(&all_signals);
 
-        let first_time_stamp = *wave.time_table().first().unwrap();
-        let last_time_stamp = args.span.unwrap_or_else(|| *wave.time_table().last().unwrap());
+        let last_time_stamp = *wave.time_table().last().unwrap();
+        let accumulation_span = args.span.unwrap_or_else(|| last_time_stamp);
+        let num_of_iterations = last_time_stamp / accumulation_span;
 
         // TODO: A massive optimization that can be done here is to calculate stats only
         // for exported signals instead of all nets
         // It's easy to do with the current implementation of DFS (see src/exporter/mod.rs).
         // However it's single-threaded and parallelizing it efficiently is non-trivial.
-        let stats: HashMap<HashVarRef, stats::PackedStats> = all_vars.par_iter()
+        let stats: HashMap<HashVarRef, Vec<stats::PackedStats>> = all_vars.par_iter()
             .zip(all_signals)
             .map(|(var_ref, sig_ref)| (*var_ref, wave.get_signal(sig_ref).unwrap()))
-            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats(&wave, sig, first_time_stamp, last_time_stamp)))
+            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats_temp(&wave, sig, num_of_iterations)))
             .collect();
 
         let clk_period = 1.0_f64 / args.clk_freq;
