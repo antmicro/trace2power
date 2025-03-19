@@ -1,5 +1,5 @@
 use itertools::izip;
-use wellen::{Signal, SignalValue, TimeTableIdx};
+use wellen::{Signal, simple::Waveform, SignalValue, TimeTableIdx};
 
 #[derive(Debug, Clone)]
 pub struct SignalStats {
@@ -39,19 +39,25 @@ impl SignalStats {
     }
 }
 
-fn val_at(ti: TimeTableIdx, sig: &Signal) -> (SignalValue, TimeTableIdx) {
+fn val_at(ti: TimeTableIdx, sig: &Signal) -> SignalValue {
     let offset = sig.get_offset(ti).unwrap();
-    (sig.get_value_at(&offset, 0), sig.get_time_idx_at(&offset))
+    return sig.get_value_at(&offset, 0)
 }
 
-pub fn calc_stats(sig: &Signal, time_end: wellen::Time) -> PackedStats {
+fn time_value_at(wave: &Waveform, ti: TimeTableIdx) -> u64 {
+    let time_stamp = wave.time_table()[ti as usize];
+    return time_stamp;
+}
+
+pub fn calc_stats(wave: &Waveform, sig: &Signal, span_index: u32, first_time_stamp: wellen::Time, last_time_stamp: wellen::Time) -> PackedStats {
     let n = sig.time_indices().len();
     if n == 0 {
         return PackedStats::Vector(Vec::new());
     }
 
-    let (mut prev_val, mut prev_ts) = val_at(sig.get_first_time_idx().unwrap(), sig);
-    
+    let mut prev_val = val_at(sig.get_first_time_idx().unwrap(), sig);
+    let mut prev_ts = time_value_at(wave, sig.get_first_time_idx().unwrap());
+
     let bits = prev_val.bits();
 
     // Check if bits are valid, otherwise value is a real number
@@ -67,9 +73,20 @@ pub fn calc_stats(sig: &Signal, time_end: wellen::Time) -> PackedStats {
     for _ in 0..bit_len {
         ss.push(Default::default())
     }
-
+    
     for time_idx in sig.time_indices().iter() {
-        let (val, ts) = val_at(*time_idx, sig);
+        let val = val_at(*time_idx, sig);
+        let ts = time_value_at(wave, *time_idx);
+     
+        if ts < first_time_stamp {
+            prev_ts = ts;
+            prev_val = val;
+            continue;
+        }
+        if ts > last_time_stamp {
+            break;
+        }
+
         let val_str = val.to_bit_string().unwrap();
         let prev_val_str = prev_val.to_bit_string().unwrap();
         for (c, prev_c, i) in izip!(val_str.chars(), prev_val_str.chars(), 0..) {
@@ -93,14 +110,14 @@ pub fn calc_stats(sig: &Signal, time_end: wellen::Time) -> PackedStats {
                 }
             }
 
-            ss[i].modify_time_stat_of_value(prev_c, |v| v + ts - prev_ts);
+            ss[i].modify_time_stat_of_value(prev_c, |v| v + (ts - prev_ts) as u32);
         }
         prev_ts = ts;
         prev_val = val;
     }
 
     for (prev_c, i) in izip!(prev_val.to_bit_string().unwrap().chars(), 0..) {
-        ss[i].modify_time_stat_of_value(prev_c, |v| v + (time_end - (prev_ts as u64)) as u32);
+        ss[i].modify_time_stat_of_value(prev_c, |v| v + (last_time_stamp - (prev_ts as u64)) as u32);
     }
 
     // TODO: Figure out how the indexing direction is denoted

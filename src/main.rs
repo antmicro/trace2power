@@ -59,7 +59,10 @@ struct Cli {
     remove_virtual_pins: bool,
     /// Write the output to a specified file instead of stdout.
     #[arg(short, long)]
-    output: Option<std::path::PathBuf>
+    output: Option<std::path::PathBuf>,
+    /// Time span of single stats accumulation. By default it accumulates from the entire trace file.
+    #[arg(short, long, value_parser = clap::value_parser!(u64))]
+    span: Option<u64>
 }
 
 fn indexed_name(mut name: String, variable: &Var) -> String {
@@ -125,7 +128,8 @@ struct Context {
     top: String,
     top_scope: Option<ScopeRef>,
     blackboxes_only: bool,
-    remove_virtual_pins: bool
+    remove_virtual_pins: bool,
+    span: Option<u64>
 }
 
 impl Context {
@@ -170,7 +174,8 @@ impl Context {
 
         wave.load_signals_multi_threaded(&all_signals);
 
-        let time_end = *wave.time_table().last().unwrap();
+        let first_time_stamp = *wave.time_table().first().unwrap();
+        let last_time_stamp = args.span.unwrap_or_else(|| *wave.time_table().last().unwrap());
 
         // TODO: A massive optimization that can be done here is to calculate stats only
         // for exported signals instead of all nets
@@ -179,7 +184,7 @@ impl Context {
         let stats: HashMap<HashVarRef, stats::PackedStats> = all_vars.par_iter()
             .zip(all_signals)
             .map(|(var_ref, sig_ref)| (*var_ref, wave.get_signal(sig_ref).unwrap()))
-            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats(sig, time_end)))
+            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats(&wave, sig, first_time_stamp, last_time_stamp)))
             .collect();
 
         let clk_period = 1.0_f64 / args.clk_freq;
@@ -205,7 +210,8 @@ impl Context {
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
             blackboxes_only: args.blackboxes_only,
-            remove_virtual_pins: args.remove_virtual_pins
+            remove_virtual_pins: args.remove_virtual_pins,
+            span: args.span
         }
     }
 }
