@@ -235,7 +235,7 @@ fn main() {
         Some(path) => {
             for iteration in 0..ctx.num_of_iterations {
                 let mut file_path = path.clone();
-                file_path.push(iteration.to_string() + ".tcl");
+                file_path.push(format!("{:05}", iteration) + ".tcl");
                 println!("{:?}", file_path);
                 let f = std::fs::File::create(file_path).unwrap();
                 let writer = std::io::BufWriter::new(f);

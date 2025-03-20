@@ -131,9 +131,9 @@ pub fn export<W>(
 
     writeln!(out, "proc set_pin_activity_and_duty {{}} {{")?;
     for (stats, pins) in agent.grouped_stats {
-        let duty = (stats.high_time as f64) / (time_end as f64);
+        let duty = (stats.high_time as f64) / ((time_end / ctx.num_of_iterations) as f64);
         let activity = ((stats.trans_count_doubled as f64) / 2.0_f64)
-            / ((time_end as f64) * timescale_norm / ctx.clk_period);
+            / (((time_end / ctx.num_of_iterations) as f64) * timescale_norm / ctx.clk_period);
 
         writeln!(
             out,

@@ -204,7 +204,7 @@ pub fn export<W>(
         clap::crate_name!(),
         clap::crate_version!(),
         timescale.factor, DisplayTimescaleUnit(timescale.unit),
-        time_end
+        time_end / ctx.num_of_iterations
     )?;
 
     let netlist_root = match ctx.top_scope {
