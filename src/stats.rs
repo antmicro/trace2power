@@ -2,6 +2,7 @@ use core::num;
 
 use itertools::izip;
 use wellen::{Signal, simple::Waveform, SignalValue, TimeTableIdx};
+use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
 pub struct SignalStats {
@@ -51,17 +52,18 @@ fn time_value_at(wave: &Waveform, ti: TimeTableIdx) -> u64 {
     return time_stamp;
 }
 
-pub fn calc_stats_temp(wave: &Waveform, sig: &Signal, num_of_iterations: u64) -> Vec<PackedStats> {
-    let mut stats = Vec::new();
+pub fn calc_stats_for_each_time_span(wave: &Waveform, sig: &Signal, num_of_iterations: u64) -> Vec<PackedStats> {
+    let mut stats = Vec::with_capacity(num_of_iterations as usize);
     let time_span = (*wave.time_table().last().unwrap()) / num_of_iterations;
 
-    for index in 0..num_of_iterations {
+    stats.extend((0..num_of_iterations).into_par_iter().map(|index| {
         let first_time_stamp = index * time_span;
         let last_time_stamp = (index + 1) * time_span;
-        stats.push(calc_stats(wave, sig, first_time_stamp, last_time_stamp));
-    }
+        return calc_stats(wave, sig, first_time_stamp, last_time_stamp);
+    }).collect::<Vec<PackedStats>>());
 
     return stats;
+
 }
 
 pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time, last_time_stamp: wellen::Time) -> PackedStats {
