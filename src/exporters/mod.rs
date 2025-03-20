@@ -21,7 +21,7 @@ struct TraceVisitCtx<'b, 'w, 'n, W> where W: std::io::Write {
     out: &'b mut W,
     waveform: &'w Waveform,
     netlist_root: Vec<String>,
-    top_module: String,
+    top_module: &'w String,
     netlist: Option<&'n Netlist>,
     netlist_prefix: Vec<String>,
     blackboxes_only: bool,
@@ -81,7 +81,7 @@ fn get_child_module_reference<'p, 'b, 'w, 'n, W>(
         let name = scope.name(ctx.waveform.hierarchy());
         match (parent_module, &ctx.netlist_prefix) {
             (ModuleRef::OutsideNetlist, scope @ _) => if scope == &ctx.netlist_root {
-                match netlist.modules.get(&ctx.top_module) {
+                match netlist.modules.get(ctx.top_module) {
                     Some(module) => ModuleRef::Netlist(module),
                     None => panic!("Top module `{}` was not found", ctx.top_module),
                 }

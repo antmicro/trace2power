@@ -32,15 +32,15 @@ struct ScopeCtx {
     instance_empty: bool,
 }
 
-struct SaifAgent {
-    stats: HashMap<HashVarRef, Vec<PackedStats>>,
+struct SaifAgent<'a> {
+    stats: &'a HashMap<HashVarRef, Vec<PackedStats>>,
     span_index: usize,
     scope_ctx: Vec<ScopeCtx>,
     indent: usize
 }
 
-impl SaifAgent {
-    fn new(stats: HashMap<HashVarRef, Vec<PackedStats>>, span_index: usize, indent: usize) -> Self {
+impl<'a> SaifAgent<'a> {
+    fn new(stats: &'a HashMap<HashVarRef, Vec<PackedStats>>, span_index: usize, indent: usize) -> Self {
         Self {
             stats,
             span_index,
@@ -50,7 +50,7 @@ impl SaifAgent {
     }
 }
 
-impl SaifAgent {
+impl<'a> SaifAgent<'a> {
     fn get_ctx<'s>(&'s self) -> &'s ScopeCtx { self.scope_ctx.last().unwrap() }
     fn get_ctx_mut<'s>(&'s mut self) -> &'s mut ScopeCtx { self.scope_ctx.last_mut().unwrap() }
     fn get_parent_ctx_mut<'s>(&'s mut self) -> Option<&'s mut ScopeCtx> {
@@ -105,7 +105,7 @@ impl SaifAgent {
 
 }
 
-impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent where W: std::io::Write {
+impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
     type Error = std::io::Error;
 
     fn enter_net(&mut self, ctx: &mut TraceVisitCtx<W>, var_ref: VarRef)
@@ -176,8 +176,9 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent where W: std::io::Write {
 }
 
 pub fn export<W>(
-    ctx: Context,
-    mut out: W
+    ctx: &Context,
+    mut out: W,
+    iteration: usize
 ) -> std::io::Result<()>
     where W: std::io::Write
 {
@@ -218,14 +219,14 @@ pub fn export<W>(
         out: &mut out,
         waveform: &ctx.wave,
         netlist_root,
-        top_module: ctx.top,
+        top_module: &ctx.top,
         netlist: ctx.netlist.as_ref(),
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
         remove_virtual_pins: ctx.remove_virtual_pins,
     };
 
-    let mut agent = SaifAgent::new(ctx.stats, 0, 1);
+    let mut agent = SaifAgent::new(&ctx.stats, iteration, 1);
     agent.visit_hierarchy(ctx.lookup_point, &mut visitor_ctx)?;
 
     write!(out, ")\n")?;

@@ -1,7 +1,10 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use std::str::FromStr;
+use std::fs::File;
+use std::iter;
+use std::path::PathBuf;
+use std::{io::BufWriter, str::FromStr};
 use std::collections::HashMap;
 
 use clap::Parser;
@@ -121,6 +124,7 @@ struct Context {
     wave: Waveform,
     clk_period: f64,
     stats: HashMap<HashVarRef, Vec<PackedStats>>,
+    num_of_iterations: u64,
     lookup_point: LookupPoint,
     output_fmt: OutputFormat,
     scope_prefix_length: usize,
@@ -128,8 +132,7 @@ struct Context {
     top: String,
     top_scope: Option<ScopeRef>,
     blackboxes_only: bool,
-    remove_virtual_pins: bool,
-    span: Option<u64>
+    remove_virtual_pins: bool
 }
 
 impl Context {
@@ -198,7 +201,8 @@ impl Context {
         Self {
             wave,
             clk_period,
-            stats: stats,
+            stats,
+            num_of_iterations,
             lookup_point,
             output_fmt: args.output_format,
             scope_prefix_length: lookup_scope_name_prefix.len(),
@@ -211,16 +215,15 @@ impl Context {
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
             blackboxes_only: args.blackboxes_only,
-            remove_virtual_pins: args.remove_virtual_pins,
-            span: args.span
+            remove_virtual_pins: args.remove_virtual_pins
         }
     }
 }
 
-fn process_trace<W>(ctx: Context, out: W) where W: std::io::Write {
+fn process_trace<W>(ctx: &Context, out: W, iteration: usize) where W: std::io::Write {
     match &ctx.output_fmt {
-        OutputFormat::Tcl => exporters::tcl::export(ctx, out),
-        OutputFormat::Saif => exporters::saif::export(ctx, out),
+        OutputFormat::Tcl => exporters::tcl::export(&ctx, out, iteration),
+        OutputFormat::Saif => exporters::saif::export(&ctx, out, iteration),
     }.unwrap()
 }
 
@@ -228,11 +231,16 @@ fn main() {
     let args = Cli::parse();
     let ctx = Context::build_from_args(&args);
     match args.output {
-        None => process_trace(ctx, std::io::stdout()),
+        None => process_trace(&ctx, std::io::stdout(), 0),
         Some(path) => {
-            let f = std::fs::File::create(path).unwrap();
-            let writer = std::io::BufWriter::new(f);
-            process_trace(ctx, writer);
+            for iteration in 0..ctx.num_of_iterations {
+                let mut file_path = path.clone();
+                file_path.push(iteration.to_string() + ".tcl");
+                println!("{:?}", file_path);
+                let f = std::fs::File::create(file_path).unwrap();
+                let writer = std::io::BufWriter::new(f);
+                process_trace(&ctx, writer, iteration as usize);
+            }
         }
     }
 }
