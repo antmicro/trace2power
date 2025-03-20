@@ -230,16 +230,15 @@ fn process_trace<W>(ctx: &Context, out: W, iteration: usize) where W: std::io::W
 fn main() {
     let args = Cli::parse();
     let ctx = Context::build_from_args(&args);
-    match args.output {
-        None => process_trace(&ctx, std::io::stdout(), 0),
-        Some(path) => {
-            for iteration in 0..ctx.num_of_iterations {
+    for iteration in 0..ctx.num_of_iterations as usize {
+        match args.output {
+            None => process_trace(&ctx, std::io::stdout(), iteration),
+            Some(ref path) => {
                 let mut file_path = path.clone();
-                file_path.push(format!("{:05}", iteration) + ".tcl");
-                println!("{:?}", file_path);
+                file_path.push(format!("{:05}", iteration));
                 let f = std::fs::File::create(file_path).unwrap();
                 let writer = std::io::BufWriter::new(f);
-                process_trace(&ctx, writer, iteration as usize);
+                process_trace(&ctx, writer, iteration);
             }
         }
     }
