@@ -3,7 +3,7 @@
 
 use core::time;
 use std::fs::File;
-use std::iter;
+use std::{iter, path};
 use std::path::PathBuf;
 use std::{io::BufWriter, str::FromStr};
 use std::collections::HashMap;
@@ -22,6 +22,7 @@ mod parsers;
 use netlist::Netlist;
 use util::VarRefsIter;
 use parsers::spef;
+use parsers::sdc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct HashVarRef(VarRef);
@@ -39,7 +40,7 @@ struct Cli {
     input_file: std::path::PathBuf,
     /// Clock frequency (in Hz)
     #[arg(short, long, value_parser = clap::value_parser!(f64))]
-    clk_freq: f64,
+    clk_freq: Option<f64>,
     /// Format to extract data into
     #[arg(short = 'f', long, default_value = "tcl")]
     output_format: OutputFormat,
@@ -66,12 +67,13 @@ struct Cli {
     /// Write the output to a specified file instead of stdout.
     #[arg(short, long)]
     output: Option<std::path::PathBuf>,
-    /// Time span of single stats accumulation. By default it accumulates from the entire trace file.
-    #[arg(long, value_parser = clap::value_parser!(u64))]
-    span: Option<u64>,
+    /// Accumulate stats for each clock cycle separately. This flag requires passing design SDC and SPEF files
+    /// for calculation of clock period.
+    #[arg(long)]
+    per_clock_cycle: bool,
     /// Path to SDC file
-    #[arg(short, long)]
-    sdc_file: Option<std::path::PathBuf>,
+    #[arg(long)]
+    sdc: Option<std::path::PathBuf>,
     /// Path to SPEF file
     #[arg(long)]
     spef: Option<std::path::PathBuf>
@@ -151,43 +153,47 @@ impl Context {
             remove_scopes_with_empty_name: false,
         };
 
-        let mut clock_period = 0.0;
-
-        if args.sdc_file != None {
-            let mut variables_map = HashMap::new();
-
-            let input = std::fs::read_to_string(args.sdc_file.clone().unwrap()).unwrap();
-            let sdc_content = sdcx::Parser::parse(&input, &args.sdc_file.clone().unwrap()).unwrap();
-            for command in sdc_content.commands {
-                match command {
-                    sdcx::sdc::Command::CreateClock(command) => {
-                        if command.period.as_str().starts_with('$') {
-                            clock_period = *variables_map.get(command.period.as_str().split_at(1).1).unwrap();
-                        } else {
-                            clock_period = command.period.as_str().parse().unwrap();
-                        }
-
-                        println!("Clock period is {clock_period}")
-                    },
-                    sdcx::sdc::Command::Set(command) => {
-                        variables_map.insert(command.variable_name.to_string(), command.value.as_str().parse().unwrap_or(0.0));
-                    },
-                    _ => {}
-                }
-            }
-        }
-
-        let time_unit;
-
-        if args.spef != None {
-            let spef = parsers::spef::parse_spef(args.spef.clone().unwrap().to_str().unwrap());
-            time_unit = spef.unwrap().t_unit;
-            println!("{}", time_unit);
-        }
-
         let mut wave =
             wellen::simple::read_with_options(args.input_file.to_str().unwrap(), &LOAD_OPTS)
                 .unwrap();
+
+        let vcd_time_scale = wave.hierarchy().timescale().unwrap_or_else(|| panic!("Unable to read time scale from VCD"));
+
+        let sdc_clock_period = match &args.sdc {
+            None => {
+                if args.clk_freq == None {
+                    panic!("Clock frequency or SDC file were not specified");
+                }
+
+                0.0
+            },
+            Some(path) => {
+                let sdc = parsers::sdc::parse_sdc(path.to_str().unwrap());
+                sdc.unwrap().clock_period
+            },
+        };
+
+        let spef_time_unit = match &args.spef {
+            None => {
+                if args.clk_freq == None {
+                    panic!("Clock frequency or SPEF file were not specified");
+                }
+
+                0.0
+            },
+            Some(path) => {
+                let spef = parsers::spef::parse_spef(path.to_str().unwrap());
+                spef.unwrap().t_unit
+            }
+        };
+
+        let clock_vcd_time_span: u32 = match &args.clk_freq {
+            None => (sdc_clock_period * spef_time_unit / vcd_time_scale.factor as f64 * 10_f64.powf(vcd_time_scale.unit.to_exponent().unwrap() as f64)) as u32,
+            Some(clk_freq) => (1.0_f64 / clk_freq / vcd_time_scale.factor as f64) as u32
+        };
+        println!("{:?}", clock_vcd_time_span);
+
+        let clk_period = 1.0_f64 / args.clk_freq.unwrap_or(sdc_clock_period * spef_time_unit);
 
         let lookup_point = match &args.limit_scope {
             None => LookupPoint::Top,
@@ -221,7 +227,7 @@ impl Context {
         wave.load_signals_multi_threaded(&all_signals);
 
         let last_time_stamp = *wave.time_table().last().unwrap();
-        let accumulation_span = args.span.unwrap_or_else(|| last_time_stamp);
+        let accumulation_span = 5000;//args.span.unwrap_or_else(|| last_time_stamp);
         let num_of_iterations = last_time_stamp / accumulation_span;
 
         // TODO: A massive optimization that can be done here is to calculate stats only
@@ -233,8 +239,6 @@ impl Context {
             .map(|(var_ref, sig_ref)| (*var_ref, wave.get_signal(sig_ref).unwrap()))
             .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats_for_each_time_span(&wave, sig, num_of_iterations)))
             .collect();
-
-        let clk_period = 1.0_f64 / args.clk_freq;
 
         let top_scope = args.top_scope.as_ref()
             .map(|s| get_scope_by_full_name(wave.hierarchy(), s)

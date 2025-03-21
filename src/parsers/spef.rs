@@ -1,10 +1,8 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use core::time;
 use std::fs::File;
 use std::io::{self, BufRead};
-use std::path::Path;
 
 // Currently only care about time unit
 #[derive(Debug)]
