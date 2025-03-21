@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use core::time;
 use std::fs::File;
 use std::iter;
 use std::path::PathBuf;
@@ -16,9 +17,11 @@ pub mod util;
 pub mod stats;
 pub mod netlist;
 mod exporters;
+mod parsers;
 
 use netlist::Netlist;
 use util::VarRefsIter;
+use parsers::spef;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct HashVarRef(VarRef);
@@ -68,7 +71,10 @@ struct Cli {
     span: Option<u64>,
     /// Path to SDC file
     #[arg(short, long)]
-    sdc_file: Option<std::path::PathBuf>
+    sdc_file: Option<std::path::PathBuf>,
+    /// Path to SPEF file
+    #[arg(long)]
+    spef: Option<std::path::PathBuf>
 }
 
 fn indexed_name(mut name: String, variable: &Var) -> String {
@@ -169,6 +175,14 @@ impl Context {
                     _ => {}
                 }
             }
+        }
+
+        let time_unit;
+
+        if args.spef != None {
+            let spef = parsers::spef::parse_spef(args.spef.clone().unwrap().to_str().unwrap());
+            time_unit = spef.unwrap().t_unit;
+            println!("{}", time_unit);
         }
 
         let mut wave =
