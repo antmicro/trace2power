@@ -7,7 +7,7 @@ use std::path::PathBuf;
 use std::{io::BufWriter, str::FromStr};
 use std::collections::HashMap;
 
-use clap::Parser;
+use clap::{command, Parser};
 use stats::PackedStats;
 use wellen::{self, simple::Waveform, GetItem, Hierarchy, ScopeRef, Var, VarRef};
 use rayon::prelude::*;
@@ -64,8 +64,11 @@ struct Cli {
     #[arg(short, long)]
     output: Option<std::path::PathBuf>,
     /// Time span of single stats accumulation. By default it accumulates from the entire trace file.
-    #[arg(short, long, value_parser = clap::value_parser!(u64))]
-    span: Option<u64>
+    #[arg(long, value_parser = clap::value_parser!(u64))]
+    span: Option<u64>,
+    /// Path to SDC file
+    #[arg(short, long)]
+    sdc_file: Option<std::path::PathBuf>
 }
 
 fn indexed_name(mut name: String, variable: &Var) -> String {
@@ -141,6 +144,32 @@ impl Context {
             multi_thread: true,
             remove_scopes_with_empty_name: false,
         };
+
+        let mut clock_period = 0.0;
+
+        if args.sdc_file != None {
+            let mut variables_map = HashMap::new();
+
+            let input = std::fs::read_to_string(args.sdc_file.clone().unwrap()).unwrap();
+            let sdc_content = sdcx::Parser::parse(&input, &args.sdc_file.clone().unwrap()).unwrap();
+            for command in sdc_content.commands {
+                match command {
+                    sdcx::sdc::Command::CreateClock(command) => {
+                        if command.period.as_str().starts_with('$') {
+                            clock_period = *variables_map.get(command.period.as_str().split_at(1).1).unwrap();
+                        } else {
+                            clock_period = command.period.as_str().parse().unwrap();
+                        }
+
+                        println!("Clock period is {clock_period}")
+                    },
+                    sdcx::sdc::Command::Set(command) => {
+                        variables_map.insert(command.variable_name.to_string(), command.value.as_str().parse().unwrap_or(0.0));
+                    },
+                    _ => {}
+                }
+            }
+        }
 
         let mut wave =
             wellen::simple::read_with_options(args.input_file.to_str().unwrap(), &LOAD_OPTS)
