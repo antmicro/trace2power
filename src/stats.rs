@@ -61,13 +61,12 @@ pub fn calc_stats_for_each_time_span(wave: &Waveform, sig: &Signal, num_of_itera
     }).collect::<Vec<PackedStats>>());
 
     return stats;
-
 }
 
 pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time, last_time_stamp: wellen::Time) -> PackedStats {
     let n = sig.time_indices().len();
     if n == 0 {
-        return PackedStats::Vector{stats: Vec::new()};
+        return PackedStats::Vector(Vec::new());
     }
 
     let mut prev_val = val_at(sig.get_first_time_idx().unwrap(), sig);
@@ -77,7 +76,7 @@ pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time,
     // Check if bits are valid, otherwise value is a real number
     if bits == None {
         // TODO: add function handling real numbers
-        return PackedStats::Vector{stats: Vec::new()};
+        return PackedStats::Vector(Vec::new());
     }
 
     let bit_len = bits.unwrap();
@@ -103,10 +102,10 @@ pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time,
         current_value_entry_index += 1;
     }
 
-    // For high time calculations to start from specified first time stamp
+    // For high time calculations to start only from specified first time stamp
     let mut prev_ts = first_time_stamp;
     
-    // Accumulate statistics over specified time span
+    // Accumulate statistics over desired time span
     while current_value_entry_index < sig.time_indices().len() {
         let time_idx = sig.time_indices()[current_value_entry_index];
         let val = val_at(time_idx, sig);
@@ -154,13 +153,13 @@ pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time,
     ss.reverse();
 
     return if ss.len() == 1 {
-        PackedStats::OneBit{stats: ss.into_iter().next().unwrap()}
+        PackedStats::OneBit(ss.into_iter().next().unwrap())
     } else {
-        PackedStats::Vector{stats: ss}
+        PackedStats::Vector(ss)
     }
 }
 
 pub enum PackedStats {
-    OneBit{stats: SignalStats},
-    Vector{stats: Vec<SignalStats>}
+    OneBit(SignalStats),
+    Vector(Vec<SignalStats>)
 }

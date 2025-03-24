@@ -28,14 +28,18 @@ pub fn parse_sdc(file_path: &str) -> io::Result<Sdc> {
     for command in sdc_content.commands {
         match command {
             sdcx::sdc::Command::CreateClock(command) => {
-                if command.period.as_str().starts_with('$') {
-                    sdc.clock_period = *variables_map.get(command.period.as_str().split_at(1).1).unwrap();
+                let period_str = command.period.as_str();
+                sdc.clock_period = if period_str.starts_with('$') {
+                    *variables_map.get(&period_str[1..]).unwrap()
                 } else {
-                    sdc.clock_period = command.period.as_str().parse().unwrap();
+                    period_str.parse().unwrap()
                 }
             },
             sdcx::sdc::Command::Set(command) => {
-                variables_map.insert(command.variable_name.to_string(), command.value.as_str().parse().unwrap_or(0.0));
+                variables_map.insert(command.variable_name.to_string(), command.value.as_str().parse().unwrap_or_else(
+                    |_| {
+                        println!("Unable to parse SDC variable value {:?} -> {:?}", command.variable_name.as_str(), command.value.as_str()); 0.0
+                    }));
             },
             _ => {}
         }

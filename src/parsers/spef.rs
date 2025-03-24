@@ -42,23 +42,20 @@ pub fn parse_spef(file_path: &str) -> io::Result<Spef> {
 
     let mut header = Spef::new();
 
-    for line in reader.lines() {
-        let mut line = line?;
+    for line in reader.lines().filter_map(Result::ok) {
+        let line = line.trim();
 
-        if line.trim().is_empty() {
+        if line.is_empty() {
             continue;
         }
         
-        line = line.split("*").last().unwrap().to_string();
-        line = line.trim().to_string();
+        if let Some(line) = line.split('*').last() {
+            if line.starts_with("T_UNIT") {
+                header.t_unit = parse_time(&line[6..].trim());
 
-        if line.starts_with("T_UNIT") {
-            let time_unit = line[6..].trim().to_string();
-            header.t_unit = parse_time(&time_unit);
-
-            // As we are only interested in the time unit, we can stop parsing after
-            // extracting the needed information.
-            break;
+                // As we only care for T_UNIT for now, we can quit here
+                break;
+            }
         }
     }
 

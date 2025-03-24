@@ -122,11 +122,11 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
 
         let my_stats = &self.stats[&HashVarRef(var_ref)][self.span_index];
         match my_stats {
-            PackedStats::OneBit{stats} => {
+            PackedStats::OneBit(stat) => {
                 let name = indexed_name(net.name(ctx.waveform.hierarchy()).into(), net);
-                self.write_net_stat(ctx, name, stats)?;
+                self.write_net_stat(ctx, name, stat)?;
             }
-            PackedStats::Vector{stats} => for (idx, stat) in stats.iter().enumerate() {
+            PackedStats::Vector(stats) => for (idx, stat) in stats.iter().enumerate() {
                 let name = format!("{}[{}]", net.name(ctx.waveform.hierarchy()), idx);
                 self.write_net_stat(ctx, name, stat)?;
             }

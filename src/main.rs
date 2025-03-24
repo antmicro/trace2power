@@ -61,8 +61,7 @@ struct Cli {
     /// Write the output to a specified file instead of stdout.
     #[arg(short, long)]
     output: Option<std::path::PathBuf>,
-    /// Accumulate stats for each clock cycle separately. This flag requires passing design SDC and SPEF files
-    /// for calculation of clock period.
+    /// Accumulate stats for each clock cycle separately. Output path is required to be a directory.
     #[arg(long)]
     per_clock_cycle: bool,
     /// Path to SDC file
@@ -151,19 +150,22 @@ impl Context {
             wellen::simple::read_with_options(args.input_file.to_str().unwrap(), &LOAD_OPTS)
                 .unwrap();
 
-        let vcd_time_scale = wave.hierarchy().timescale().unwrap_or_else(|| panic!("Unable to read time scale from VCD"));
-        let vcd_time_unit = 10.0_f64.powf(vcd_time_scale.unit.to_exponent().unwrap() as f64);
+        let vcd_time_scale = wave.hierarchy().timescale().unwrap_or_else(|| panic!("Unable to read a time scale from VCD"));
+        let vcd_time_unit = vcd_time_scale.factor as f64 * 10.0_f64.powf(vcd_time_scale.unit.to_exponent().unwrap() as f64);
 
         let sdc_clock_period = match &args.sdc {
             None => {
                 if args.clk_freq == None {
-                    panic!("Clock frequency or SDC file were not specified");
+                    panic!("Clock frequency or SDC file not specified");
                 }
 
                 0.0
             },
             Some(path) => {
                 let sdc = parsers::sdc::parse_sdc(path.to_str().unwrap());
+                if !sdc.is_ok() {
+                    panic!("Unable to parse SDC file")
+                }
                 sdc.unwrap().clock_period
             },
         };
@@ -171,13 +173,16 @@ impl Context {
         let spef_time_unit = match &args.spef {
             None => {
                 if args.clk_freq == None {
-                    panic!("Clock frequency or SPEF file were not specified");
+                    panic!("Clock frequency or SPEF file not specified");
                 }
 
                 0.0
             },
             Some(path) => {
                 let spef = parsers::spef::parse_spef(path.to_str().unwrap());
+                if !spef.is_ok() {
+                    panic!("Unable to parse SPEF file")
+                }
                 spef.unwrap().t_unit
             }
         };
