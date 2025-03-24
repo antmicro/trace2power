@@ -272,19 +272,40 @@ fn process_trace<W>(ctx: &Context, out: W, iteration: usize) where W: std::io::W
     }.unwrap()
 }
 
+fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+    if output_path == None {
+        panic!("Output is saved as separate files, so you must specify a path to a directory")
+    }
+    
+    let mut path = output_path.unwrap();
+    
+    // TODO: multithreading can also be introduced here to process every iteration in parallel
+    for iteration in 0..ctx.num_of_iterations as usize {
+        path.push(format!("{:05}", iteration));
+        let f = std::fs::File::create(&path).unwrap();
+        let writer = std::io::BufWriter::new(f);
+        process_trace(&ctx, writer, iteration);
+        path.pop();
+    }
+}
+
+fn process_single_iteration_trace(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+    match output_path {
+        None => process_trace(&ctx, std::io::stdout(), 0),
+        Some(ref path) => {
+            let f = std::fs::File::create(path).unwrap();
+            let writer = std::io::BufWriter::new(f);
+            process_trace(&ctx, writer, 0);
+        }
+    }
+}
+
 fn main() {
     let args = Cli::parse();
     let ctx = Context::build_from_args(&args);
-    for iteration in 0..ctx.num_of_iterations as usize {
-        match args.output {
-            None => process_trace(&ctx, std::io::stdout(), iteration),
-            Some(ref path) => {
-                let mut file_path = path.clone();
-                file_path.push(format!("{:05}", iteration));
-                let f = std::fs::File::create(file_path).unwrap();
-                let writer = std::io::BufWriter::new(f);
-                process_trace(&ctx, writer, iteration);
-            }
-        }
+    if ctx.num_of_iterations > 1 {
+        process_trace_iterations(&ctx, args.output);
+    } else {
+        process_single_iteration_trace(&ctx, args.output);
     }
 }
