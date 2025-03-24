@@ -59,12 +59,12 @@ impl<'w, W> TraceVisitorAgent<'w, W> for TclAgent<'w> where W: std::io::Write {
         );
 
         match &stats[self.span_index] {
-            PackedStats::OneBit{duration: _, stats} => {
+            PackedStats::OneBit{stats} => {
                 self.grouped_stats.entry(TclStat::from(stats))
                     .or_insert_with(|| vec![])
                     .push(fname);
             },
-            PackedStats::Vector{duration: _, stats} => for (idx, stat) in stats.iter().enumerate() {
+            PackedStats::Vector{stats} => for (idx, stat) in stats.iter().enumerate() {
                 self.grouped_stats.entry(TclStat::from(stat))
                     .or_insert_with(|| vec![])
                     .push(format!("{}[{}]", fname, idx));
