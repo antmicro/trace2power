@@ -2,8 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::HashMap;
-use std::fs::File;
-use std::io::{self, BufRead};
+use std::io::{self};
 
 // Currently only care about time unit
 #[derive(Debug)]

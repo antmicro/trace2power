@@ -1,14 +1,10 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use core::time;
-use std::fs::File;
-use std::{iter, path};
-use std::path::PathBuf;
-use std::{io::BufWriter, str::FromStr};
+use std::str::FromStr;
 use std::collections::HashMap;
 
-use clap::{command, Parser};
+use clap::Parser;
 use stats::PackedStats;
 use wellen::{self, simple::Waveform, GetItem, Hierarchy, ScopeRef, Var, VarRef};
 use rayon::prelude::*;
@@ -21,8 +17,6 @@ mod parsers;
 
 use netlist::Netlist;
 use util::VarRefsIter;
-use parsers::spef;
-use parsers::sdc;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct HashVarRef(VarRef);
