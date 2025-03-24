@@ -158,6 +158,7 @@ impl Context {
                 .unwrap();
 
         let vcd_time_scale = wave.hierarchy().timescale().unwrap_or_else(|| panic!("Unable to read time scale from VCD"));
+        let vcd_time_unit = 10.0_f64.powf(vcd_time_scale.unit.to_exponent().unwrap() as f64);
 
         let sdc_clock_period = match &args.sdc {
             None => {
@@ -187,13 +188,11 @@ impl Context {
             }
         };
 
-        let clock_vcd_time_span: u32 = match &args.clk_freq {
-            None => (sdc_clock_period * spef_time_unit / vcd_time_scale.factor as f64 * 10_f64.powf(vcd_time_scale.unit.to_exponent().unwrap() as f64)) as u32,
-            Some(clk_freq) => (1.0_f64 / clk_freq / vcd_time_scale.factor as f64) as u32
+        let clk_period = match &args.clk_freq {
+            None => sdc_clock_period * spef_time_unit as f64,
+            Some(clk_freq) => 1.0_f64 / clk_freq
         };
-        println!("{:?}", clock_vcd_time_span);
-
-        let clk_period = 1.0_f64 / args.clk_freq.unwrap_or(sdc_clock_period * spef_time_unit);
+        let vcd_clock_period = (clk_period / vcd_time_unit) as u64;
 
         let lookup_point = match &args.limit_scope {
             None => LookupPoint::Top,
@@ -227,8 +226,7 @@ impl Context {
         wave.load_signals_multi_threaded(&all_signals);
 
         let last_time_stamp = *wave.time_table().last().unwrap();
-        let accumulation_span = 5000;//args.span.unwrap_or_else(|| last_time_stamp);
-        let num_of_iterations = last_time_stamp / accumulation_span;
+        let num_of_iterations = if args.per_clock_cycle { last_time_stamp / vcd_clock_period } else { 1 };
 
         // TODO: A massive optimization that can be done here is to calculate stats only
         // for exported signals instead of all nets
