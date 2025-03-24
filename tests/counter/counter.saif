@@ -1,0 +1,27 @@
+(SAIFILE
+  (SAIFVERSION "2.0")
+  (DIRECTION "backward")
+  (DESIGN )
+  (PROGRAM_NAME "trace2power")
+  (VERSION "0.2.0")
+  (DIVIDER / )
+  (TIMESCALE 1ns)
+  (DURATION 1002)
+  (INSTANCE counter_tb
+    (INSTANCE counter0
+      (NET
+        (clk (T0 501) (T1 501) (TX 0) (TZ 0) (TC 1002) (IG 0))
+        (rst (T0 1000) (T1 2) (TX 0) (TZ 0) (TC 1) (IG 0))
+        (cnt[0] (T0 502) (T1 500) (TX 0) (TZ 0) (TC 500) (IG 0))
+        (cnt[1] (T0 502) (T1 500) (TX 0) (TZ 0) (TC 250) (IG 0))
+        (cnt[2] (T0 505) (T1 497) (TX 0) (TZ 0) (TC 125) (IG 0))
+        (cnt[3] (T0 506) (T1 496) (TX 0) (TZ 0) (TC 62) (IG 0))
+        (cnt[4] (T0 513) (T1 489) (TX 0) (TZ 0) (TC 31) (IG 0))
+        (pulse16 (T0 940) (T1 62) (TX 0) (TZ 0) (TC 62) (IG 0))
+        (pulse2 (T0 502) (T1 500) (TX 0) (TZ 0) (TC 500) (IG 0))
+        (pulse4 (T0 752) (T1 250) (TX 0) (TZ 0) (TC 250) (IG 0))
+        (pulse8 (T0 878) (T1 124) (TX 0) (TZ 0) (TC 124) (IG 0))
+      )
+    )
+  )
+)

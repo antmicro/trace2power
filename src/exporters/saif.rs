@@ -193,14 +193,12 @@ pub fn export<W>(
               (SAIFVERSION \"2.0\")
               (DIRECTION \"backward\")
               (DESIGN )
-              (DATE \"{}\")
               (PROGRAM_NAME \"{}\")
               (VERSION \"{}\")
               (DIVIDER / )
               (TIMESCALE {}{})
               (DURATION {})
         "),
-        Utc::now().format("%a %b %-d %T %Y"),
         clap::crate_name!(),
         clap::crate_version!(),
         timescale.factor, DisplayTimescaleUnit(timescale.unit),

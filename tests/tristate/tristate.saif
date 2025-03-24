@@ -1,0 +1,21 @@
+(SAIFILE
+  (SAIFVERSION "2.0")
+  (DIRECTION "backward")
+  (DESIGN )
+  (PROGRAM_NAME "trace2power")
+  (VERSION "0.2.0")
+  (DIVIDER / )
+  (TIMESCALE 1ns)
+  (DURATION 80)
+  (INSTANCE tristate_tb
+    (INSTANCE tristate0
+      (NET
+        (clk (T0 40) (T1 40) (TX 0) (TZ 0) (TC 80) (IG 0))
+        (ctrl (T0 40) (T1 40) (TX 0) (TZ 0) (TC 39) (IG 0))
+        (dir (T0 40) (T1 40) (TX 0) (TZ 0) (TC 19) (IG 0))
+        (z_state (T0 20) (T1 20) (TX 0) (TZ 40) (TC 20) (IG 0))
+        (out (T0 20) (T1 19) (TX 1) (TZ 40) (TC 20) (IG 1))
+      )
+    )
+  )
+)

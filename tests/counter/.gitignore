@@ -1,0 +1,5 @@
+*
+!.gitignore
+!Makefile
+!counter.saif
+!counter.tcl

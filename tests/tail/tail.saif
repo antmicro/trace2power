@@ -1,0 +1,21 @@
+(SAIFILE
+  (SAIFVERSION "2.0")
+  (DIRECTION "backward")
+  (DESIGN )
+  (PROGRAM_NAME "trace2power")
+  (VERSION "0.2.0")
+  (DIVIDER / )
+  (TIMESCALE 1ns)
+  (DURATION 14)
+  (INSTANCE tail
+    (INSTANCE dut
+      (NET
+        (a (T0 1) (T1 13) (TX 0) (TZ 0) (TC 1) (IG 0))
+        (b (T0 2) (T1 12) (TX 0) (TZ 0) (TC 1) (IG 0))
+        (c (T0 3) (T1 11) (TX 0) (TZ 0) (TC 1) (IG 0))
+        (d (T0 4) (T1 10) (TX 0) (TZ 0) (TC 1) (IG 0))
+        (o (T0 4) (T1 10) (TX 0) (TZ 0) (TC 1) (IG 0))
+      )
+    )
+  )
+)

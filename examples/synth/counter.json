@@ -1,0 +1,319 @@
+{
+  "creator": "Yosys 0.48 (git sha1 aaa534749, g++ 14.2.0-4ubuntu2 -fPIC -O3)",
+  "modules": {
+    "counter": {
+      "attributes": {
+        "top": "00000000000000000000000000000001",
+        "hdlname": "counter",
+        "cells_not_processed": "00000000000000000000000000000001",
+        "src": "counter.v"
+      },
+      "ports": {
+        "clk": {
+          "direction": "input",
+          "bits": [ 2 ]
+        },
+        "rst": {
+          "direction": "input",
+          "bits": [ 3 ]
+        },
+        "pulse2": {
+          "direction": "output",
+          "bits": [ 4 ]
+        },
+        "pulse4": {
+          "direction": "output",
+          "bits": [ 5 ]
+        },
+        "pulse8": {
+          "direction": "output",
+          "bits": [ 6 ]
+        },
+        "pulse16": {
+          "direction": "output",
+          "bits": [ 7 ]
+        }
+      },
+      "cells": {
+        "_06_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__inv_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/out/counter_synth.v:41.26-44.4"
+          },
+          "connections": {
+            "A": [ 4 ],
+            "Y": [ 8 ]
+          }
+        },
+        "_07_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__nand3_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/out/counter_synth.v:45.28-50.4"
+          },
+          "connections": {
+            "A": [ 4 ],
+            "B": [ 9 ],
+            "C": [ 10 ],
+            "Y": [ 11 ]
+          }
+        },
+        "_08_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__xnor2_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/out/counter_synth.v:51.28-55.4"
+          },
+          "connections": {
+            "A": [ 12 ],
+            "B": [ 11 ],
+            "Y": [ 13 ]
+          }
+        },
+        "_09_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__inv_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/out/counter_synth.v:56.26-59.4"
+          },
+          "connections": {
+            "A": [ 3 ],
+            "Y": [ 14 ]
+          }
+        },
+        "_10_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__and3_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/out/counter_synth.v:60.27-65.4"
+          },
+          "connections": {
+            "A": [ 12 ],
+            "B": [ 9 ],
+            "C": [ 5 ],
+            "X": [ 7 ]
+          }
+        },
+        "_11_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__ha_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/OpenROAD-flow-scripts/flow/platforms/sky130hd/cells_adders_hd.v:18.33-22.14"
+          },
+          "connections": {
+            "A": [ 10 ],
+            "B": [ 4 ],
+            "COUT": [ 5 ],
+            "SUM": [ 15 ]
+          }
+        },
+        "_12_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__ha_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/OpenROAD-flow-scripts/flow/platforms/sky130hd/cells_adders_hd.v:18.33-22.14"
+          },
+          "connections": {
+            "A": [ 9 ],
+            "B": [ 5 ],
+            "COUT": [ 6 ],
+            "SUM": [ 16 ]
+          }
+        },
+        "cnt[0]$_DFF_PP0_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__dfrtp_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/counter.v:21.3-27.6"
+          },
+          "connections": {
+            "CLK": [ 2 ],
+            "D": [ 8 ],
+            "Q": [ 4 ],
+            "RESET_B": [ 14 ]
+          }
+        },
+        "cnt[1]$_DFF_PP0_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__dfrtp_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/counter.v:21.3-27.6"
+          },
+          "connections": {
+            "CLK": [ 2 ],
+            "D": [ 15 ],
+            "Q": [ 10 ],
+            "RESET_B": [ 14 ]
+          }
+        },
+        "cnt[2]$_DFF_PP0_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__dfrtp_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/counter.v:21.3-27.6"
+          },
+          "connections": {
+            "CLK": [ 2 ],
+            "D": [ 16 ],
+            "Q": [ 9 ],
+            "RESET_B": [ 14 ]
+          }
+        },
+        "cnt[3]$_DFF_PP0_": {
+          "hide_name": 0,
+          "type": "sky130_fd_sc_hd__dfrtp_1",
+          "parameters": {
+          },
+          "attributes": {
+            "module_not_derived": "00000000000000000000000000000001",
+            "src": "/ci/examples/counter/counter.v:21.3-27.6"
+          },
+          "connections": {
+            "CLK": [ 2 ],
+            "D": [ 13 ],
+            "Q": [ 12 ],
+            "RESET_B": [ 14 ]
+          }
+        }
+      },
+      "netnames": {
+        "_00_": {
+          "hide_name": 0,
+          "bits": [ 8 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:25.14-25.21|/OpenROAD-flow-scripts/tools/install/yosys/bin/../share/yosys/techmap.v:270.23-270.24"
+          }
+        },
+        "_01_": {
+          "hide_name": 0,
+          "bits": [ 13 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:25.14-25.21|/OpenROAD-flow-scripts/tools/install/yosys/bin/../share/yosys/techmap.v:270.26-270.27"
+          }
+        },
+        "_02_": {
+          "hide_name": 0,
+          "bits": [ 14 ],
+          "attributes": {
+            "src": "/ci/examples/counter/out/counter_synth.v:11.8-11.12"
+          }
+        },
+        "_03_": {
+          "hide_name": 0,
+          "bits": [ 11 ],
+          "attributes": {
+            "src": "/ci/examples/counter/out/counter_synth.v:12.8-12.12"
+          }
+        },
+        "_04_": {
+          "hide_name": 0,
+          "bits": [ 15 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:25.14-25.21|/OpenROAD-flow-scripts/tools/install/yosys/bin/../share/yosys/techmap.v:270.26-270.27"
+          }
+        },
+        "_05_": {
+          "hide_name": 0,
+          "bits": [ 16 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:25.14-25.21|/OpenROAD-flow-scripts/tools/install/yosys/bin/../share/yosys/techmap.v:270.26-270.27"
+          }
+        },
+        "clk": {
+          "hide_name": 0,
+          "bits": [ 2 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:5.14-5.17"
+          }
+        },
+        "cnt[1]": {
+          "hide_name": 0,
+          "bits": [ 10 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:12.12-12.15"
+          }
+        },
+        "cnt[2]": {
+          "hide_name": 0,
+          "bits": [ 9 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:12.12-12.15"
+          }
+        },
+        "cnt[3]": {
+          "hide_name": 0,
+          "bits": [ 12 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:12.12-12.15"
+          }
+        },
+        "pulse16": {
+          "hide_name": 0,
+          "bits": [ 7 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:10.14-10.21"
+          }
+        },
+        "pulse2": {
+          "hide_name": 0,
+          "bits": [ 4 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:7.14-7.20"
+          }
+        },
+        "pulse4": {
+          "hide_name": 0,
+          "bits": [ 5 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:8.14-8.20"
+          }
+        },
+        "pulse8": {
+          "hide_name": 0,
+          "bits": [ 6 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:9.14-9.20"
+          }
+        },
+        "rst": {
+          "hide_name": 0,
+          "bits": [ 3 ],
+          "attributes": {
+            "src": "/ci/examples/counter/counter.v:6.14-6.17"
+          }
+        }
+      }
+    }
+  }
+}

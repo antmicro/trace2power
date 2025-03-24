@@ -1,0 +1,5 @@
+*
+!.gitignore
+!Makefile
+!tristate.saif
+!tristate.tcl

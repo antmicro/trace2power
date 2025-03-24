@@ -50,12 +50,6 @@ module hierarchical_tb();
     reset(16);
     repeat(32)
       calculate(rval, rval, rval);
-    //calculate(0, 0, 0);
-    //calculate(2, 2, 2);
-    //calculate(200, 4, 15);
-    //calculate(7898, 91, 10202);
-    //calculate(898, 29, 0);
-    //calculate(73911, 111111, 19);
     $finish;
   end
 endmodule
