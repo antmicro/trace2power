@@ -124,10 +124,16 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
         match my_stats {
             PackedStats::OneBit(stat) => {
                 let name = indexed_name(net.name(ctx.waveform.hierarchy()).into(), net);
+                if stat.clean_trans_count > 1 {
+                    println!("Glitch detected: signal name {:?}, clock index: {}", name.clone(), self.span_index);
+                }
                 self.write_net_stat(ctx, name, stat)?;
             }
             PackedStats::Vector(stats) => for (idx, stat) in stats.iter().enumerate() {
                 let name = format!("{}[{}]", net.name(ctx.waveform.hierarchy()), idx);
+                if stat.clean_trans_count > 1 {
+                    println!("Glitch detected: signal name {:?}, clock index: {}", name.clone(), self.span_index);
+                }
                 self.write_net_stat(ctx, name, stat)?;
             }
         }
