@@ -1,5 +1,7 @@
+use std::fmt::Debug;
+
 use itertools::izip;
-use wellen::{Signal, simple::Waveform, SignalValue, TimeTableIdx};
+use wellen::{simple::Waveform, GetItem, Signal, SignalValue, TimeTableIdx, VarRef};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -50,7 +52,10 @@ fn time_value_at(wave: &Waveform, ti: TimeTableIdx) -> u64 {
     return time_stamp;
 }
 
-pub fn calc_stats_for_each_time_span(wave: &Waveform, sig: &Signal, num_of_iterations: u64) -> Vec<PackedStats> {
+pub fn calc_stats_for_each_time_span(wave: &Waveform, var_ref: &VarRef, sig: &Signal, num_of_iterations: u64) -> Vec<PackedStats> {
+    let net = wave.hierarchy().get(*var_ref);
+    println!("Calculating stats for {:?}, id {:?}", net.name(wave.hierarchy()), sig);
+
     let mut stats = Vec::with_capacity(num_of_iterations as usize);
     let time_span = (*wave.time_table().last().unwrap()) / num_of_iterations;
 

@@ -234,7 +234,7 @@ impl Context {
         let stats: HashMap<HashVarRef, Vec<stats::PackedStats>> = all_vars.par_iter()
             .zip(all_signals)
             .map(|(var_ref, sig_ref)| (*var_ref, wave.get_signal(sig_ref).unwrap()))
-            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats_for_each_time_span(&wave, sig, num_of_iterations)))
+            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats_for_each_time_span(&wave, &var_ref, sig, num_of_iterations)))
             .collect();
 
         let top_scope = args.top_scope.as_ref()
