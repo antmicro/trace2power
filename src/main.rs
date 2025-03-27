@@ -6,7 +6,7 @@ use std::collections::HashMap;
 
 use clap::Parser;
 use stats::PackedStats;
-use wellen::{self, simple::Waveform, GetItem, Hierarchy, ScopeRef, Var, VarRef};
+use wellen::{self, simple::Waveform, GetItem, Hierarchy, ScopeRef, SignalRef, Var, VarRef};
 use rayon::prelude::*;
 
 pub mod util;
@@ -35,6 +35,9 @@ struct Cli {
     /// Clock frequency (in Hz)
     #[arg(short, long, value_parser = clap::value_parser!(f64))]
     clk_freq: Option<f64>,
+    /// Clock signal name
+    #[arg(long)]
+    clock_name: Option<String>,
     /// Format to extract data into
     #[arg(short = 'f', long, default_value = "tcl")]
     output_format: OutputFormat,
@@ -64,6 +67,9 @@ struct Cli {
     /// Accumulate stats for each clock cycle separately. Output path is required to be a directory.
     #[arg(long)]
     per_clock_cycle: bool,
+    /// Write stats only for glitches
+    #[arg(long)]
+    only_glitches: bool,
     /// Path to SDC file
     #[arg(long)]
     sdc: Option<std::path::PathBuf>,
@@ -127,6 +133,7 @@ impl FromStr for OutputFormat {
 struct Context {
     wave: Waveform,
     clk_period: f64,
+    clk_signal: Option<SignalRef>,
     stats: HashMap<HashVarRef, Vec<PackedStats>>,
     num_of_iterations: u64,
     lookup_point: LookupPoint,
@@ -136,7 +143,8 @@ struct Context {
     top: String,
     top_scope: Option<ScopeRef>,
     blackboxes_only: bool,
-    remove_virtual_pins: bool
+    remove_virtual_pins: bool,
+    only_glitches: bool
 }
 
 impl Context {
@@ -222,6 +230,16 @@ impl Context {
                 .unzip()
         };
 
+        let mut clk_signal: Option<SignalRef> = None;
+
+        for (var_ref, sig_ref) in all_vars.iter().zip(&all_signals) {
+            let net = wave.hierarchy().get(*var_ref);
+            if net.name(wave.hierarchy()) == args.clock_name.as_ref().unwrap() {
+                println!("Found clock {:?}, id {:?}", var_ref, sig_ref);
+                clk_signal = Some(*sig_ref);
+            }
+        }
+
         wave.load_signals_multi_threaded(&all_signals);
 
         let last_time_stamp = *wave.time_table().last().unwrap();
@@ -234,7 +252,7 @@ impl Context {
         let stats: HashMap<HashVarRef, Vec<stats::PackedStats>> = all_vars.par_iter()
             .zip(all_signals)
             .map(|(var_ref, sig_ref)| (*var_ref, wave.get_signal(sig_ref).unwrap()))
-            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats_for_each_time_span(&wave, &var_ref, sig, num_of_iterations)))
+            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats_for_each_time_span(&wave, sig, num_of_iterations)))
             .collect();
 
         let top_scope = args.top_scope.as_ref()
@@ -245,6 +263,7 @@ impl Context {
         Self {
             wave,
             clk_period,
+            clk_signal,
             stats,
             num_of_iterations,
             lookup_point,
@@ -259,7 +278,8 @@ impl Context {
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
             blackboxes_only: args.blackboxes_only,
-            remove_virtual_pins: args.remove_virtual_pins
+            remove_virtual_pins: args.remove_virtual_pins,
+            only_glitches: args.only_glitches
         }
     }
 }
@@ -280,7 +300,7 @@ fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::PathBu
     
     // TODO: multithreading can also be introduced here to process every iteration in parallel
     for iteration in 0..ctx.num_of_iterations as usize {
-        path.push(format!("{:05}", iteration));
+        path.push(format!("total_{:05}", iteration));
         let f = std::fs::File::create(&path).unwrap();
         let writer = std::io::BufWriter::new(f);
         process_trace(&ctx, writer, iteration);

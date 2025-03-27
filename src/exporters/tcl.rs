@@ -114,6 +114,7 @@ pub fn export<W>(
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
         remove_virtual_pins: ctx.remove_virtual_pins,
+        only_glitches: ctx.only_glitches
     };
 
     let mut agent = TclAgent::new(&ctx.stats, iteration);
@@ -131,8 +132,13 @@ pub fn export<W>(
 
     writeln!(out, "proc set_pin_activity_and_duty {{}} {{")?;
     for (stats, pins) in agent.grouped_stats {
+        let mut clean_trans_count = stats.trans_count_doubled;
+        if ctx.only_glitches && stats.trans_count_doubled <= 2{
+            clean_trans_count = 0;
+        }
+
         let duty = (stats.high_time as f64) / (time_end as f64);
-        let activity = ((stats.trans_count_doubled as f64) / 2.0_f64)
+        let activity = ((clean_trans_count as f64) / 2.0_f64)
             / (((time_end / ctx.num_of_iterations) as f64) * timescale_norm / ctx.clk_period);
 
         writeln!(

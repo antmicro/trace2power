@@ -89,6 +89,10 @@ impl<'a> SaifAgent<'a> {
         W: std::io::Write,
         S: Into<String>
     {
+        if ctx.only_glitches && stat.clean_trans_count <= 1 {
+            return Ok(());
+        }
+
         self.write_indent(ctx.out)?;
         write!(
             ctx.out,
@@ -124,16 +128,10 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
         match my_stats {
             PackedStats::OneBit(stat) => {
                 let name = indexed_name(net.name(ctx.waveform.hierarchy()).into(), net);
-                if stat.clean_trans_count > 1 {
-                    println!("Glitch detected: signal name {:?}, clock index: {}", name.clone(), self.span_index);
-                }
                 self.write_net_stat(ctx, name, stat)?;
             }
             PackedStats::Vector(stats) => for (idx, stat) in stats.iter().enumerate() {
                 let name = format!("{}[{}]", net.name(ctx.waveform.hierarchy()), idx);
-                if stat.clean_trans_count > 1 {
-                    println!("Glitch detected: signal name {:?}, clock index: {}", name.clone(), self.span_index);
-                }
                 self.write_net_stat(ctx, name, stat)?;
             }
         }
@@ -230,6 +228,7 @@ pub fn export<W>(
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
         remove_virtual_pins: ctx.remove_virtual_pins,
+        only_glitches: ctx.only_glitches
     };
 
     let mut agent = SaifAgent::new(&ctx.stats, iteration, 1);
