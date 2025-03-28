@@ -89,10 +89,6 @@ impl<'a> SaifAgent<'a> {
         W: std::io::Write,
         S: Into<String>
     {
-        if ctx.only_glitches && stat.clean_trans_count <= 1 {
-            return Ok(());
-        }
-
         self.write_indent(ctx.out)?;
         write!(
             ctx.out,

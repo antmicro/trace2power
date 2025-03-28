@@ -132,12 +132,14 @@ pub fn export<W>(
 
     writeln!(out, "proc set_pin_activity_and_duty {{}} {{")?;
     for (stats, pins) in agent.grouped_stats {
+        let mut high_time = stats.high_time;
         let mut clean_trans_count = stats.trans_count_doubled;
-        if ctx.only_glitches && stats.trans_count_doubled <= 2{
+        if ctx.only_glitches && stats.trans_count_doubled <= 2 {
+            high_time = 0;
             clean_trans_count = 0;
         }
 
-        let duty = (stats.high_time as f64) / (time_end as f64);
+        let duty = (high_time as f64) / (time_end as f64);
         let activity = ((clean_trans_count as f64) / 2.0_f64)
             / (((time_end / ctx.num_of_iterations) as f64) * timescale_norm / ctx.clk_period);
 
