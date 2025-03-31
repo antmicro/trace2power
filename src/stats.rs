@@ -1,7 +1,7 @@
-use std::{fmt::Debug, ops::Deref};
+use std::fmt::Debug;
 
 use itertools::izip;
-use wellen::{simple::Waveform, GetItem, Signal, SignalValue, TimeTableIdx, SignalRef};
+use wellen::{simple::Waveform, Signal, SignalValue, TimeTableIdx, SignalRef};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]

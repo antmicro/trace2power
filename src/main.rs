@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use std::{any, str::FromStr};
+use std::str::FromStr;
 use std::collections::HashMap;
 
 use clap::Parser;
