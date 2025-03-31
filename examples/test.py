@@ -392,6 +392,14 @@ def main():
             clk_freq=500000000,
             top='big_and',
             scope='tail/dut'
+        ),
+        Project(
+            name='glitch',
+            testbench_sources=['glitch_tb.v'],
+            rtl_sources=['glitch.v'],
+            clk_freq=500000000,
+            top='glitch',
+            scope='glitch_tb/glitch0'
         )
     ]
 
