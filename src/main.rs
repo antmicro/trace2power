@@ -1,7 +1,7 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use std::str::FromStr;
+use std::{any, str::FromStr};
 use std::collections::HashMap;
 
 use clap::Parser;
@@ -230,15 +230,21 @@ impl Context {
                 .unzip()
         };
 
-        let mut clk_signal: Option<SignalRef> = None;
+        let clk_signal: Option<SignalRef> = match &args.clock_name {
+            None => None,
+            Some(clock_name) => {
+                let mut found: Option<SignalRef> = None;
 
-        for (var_ref, sig_ref) in all_vars.iter().zip(&all_signals) {
-            let net = wave.hierarchy().get(*var_ref);
-            if net.name(wave.hierarchy()) == args.clock_name.as_ref().unwrap() {
-                println!("Found clock {:?}, id {:?}", var_ref, sig_ref);
-                clk_signal = Some(*sig_ref);
+                for (var_ref, sig_ref) in all_vars.iter().zip(&all_signals) {
+                    let net = wave.hierarchy().get(*var_ref);
+                    if net.name(wave.hierarchy()) == clock_name {
+                        found = Some(*sig_ref)
+                    }
+                }
+
+                found
             }
-        }
+        };
 
         wave.load_signals_multi_threaded(&all_signals);
 
@@ -251,8 +257,7 @@ impl Context {
         // However it's single-threaded and parallelizing it efficiently is non-trivial.
         let stats: HashMap<HashVarRef, Vec<stats::PackedStats>> = all_vars.par_iter()
             .zip(all_signals)
-            .map(|(var_ref, sig_ref)| (*var_ref, wave.get_signal(sig_ref).unwrap()))
-            .map(|(var_ref, sig)| (HashVarRef(var_ref), stats::calc_stats_for_each_time_span(&wave, sig, num_of_iterations)))
+            .map(|(var_ref, sig_ref)| (HashVarRef(*var_ref), stats::calc_stats_for_each_time_span(&wave, args.only_glitches, clk_signal, sig_ref, num_of_iterations)))
             .collect();
 
         let top_scope = args.top_scope.as_ref()

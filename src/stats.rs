@@ -1,7 +1,7 @@
-use std::fmt::Debug;
+use std::{fmt::Debug, ops::Deref};
 
 use itertools::izip;
-use wellen::{simple::Waveform, GetItem, Signal, SignalValue, TimeTableIdx, VarRef};
+use wellen::{simple::Waveform, GetItem, Signal, SignalValue, TimeTableIdx, SignalRef};
 use rayon::prelude::*;
 
 #[derive(Debug, Clone)]
@@ -42,6 +42,24 @@ impl SignalStats {
     }
 }
 
+impl SignalStats {
+    fn is_glitch<'s>(&'s mut self) -> bool {
+        self.clean_trans_count >= 2 || self.glitch_trans_count >= 2 || self.trans_count_doubled > 2
+    }
+}
+
+impl SignalStats {
+    fn clear<'s>(&'s mut self) {
+        self.trans_count_doubled = 0;
+        self.clean_trans_count = 0;
+        self.glitch_trans_count = 0;
+        self.high_time = 0;
+        self.low_time = 0;
+        self.x_time = 0;
+        self.z_time = 0;
+    }
+}
+
 fn val_at(ti: TimeTableIdx, sig: &Signal) -> SignalValue {
     let offset = sig.get_offset(ti).unwrap();
     return sig.get_value_at(&offset, 0)
@@ -52,20 +70,35 @@ fn time_value_at(wave: &Waveform, ti: TimeTableIdx) -> u64 {
     return time_stamp;
 }
 
-pub fn calc_stats_for_each_time_span(wave: &Waveform, sig: &Signal, num_of_iterations: u64) -> Vec<PackedStats> {
+pub fn calc_stats_for_each_time_span(
+    wave: &Waveform,
+    glitches_only: bool,
+    clk_signal: Option<SignalRef>,
+    sig_ref: SignalRef,
+    num_of_iterations: u64) -> Vec<PackedStats>
+{
     let mut stats = Vec::with_capacity(num_of_iterations as usize);
     let time_span = (*wave.time_table().last().unwrap()) / num_of_iterations;
 
     stats.extend((0..num_of_iterations).into_par_iter().map(|index| {
         let first_time_stamp = index * time_span;
         let last_time_stamp = (index + 1) * time_span;
-        return calc_stats(wave, sig, first_time_stamp, last_time_stamp);
+        return calc_stats(wave, glitches_only, clk_signal, sig_ref, first_time_stamp, last_time_stamp);
     }).collect::<Vec<PackedStats>>());
 
     return stats;
 }
 
-pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time, last_time_stamp: wellen::Time) -> PackedStats {
+pub fn calc_stats(
+    wave: &Waveform,
+    glitches_only: bool,
+    clk_signal: Option<SignalRef>,
+    sig_ref: SignalRef,
+    first_time_stamp: wellen::Time,
+    last_time_stamp: wellen::Time) -> PackedStats
+{
+    let sig = wave.get_signal(sig_ref).unwrap();
+
     let n = sig.time_indices().len();
     if n == 0 {
         return PackedStats::Vector(Vec::new());
@@ -149,6 +182,14 @@ pub fn calc_stats(wave: &Waveform, sig: &Signal, first_time_stamp: wellen::Time,
 
     for (prev_c, i) in izip!(prev_val.to_bit_string().unwrap().chars(), 0..) {
         ss[i].modify_time_stat_of_value(prev_c, |v| v + (last_time_stamp - (prev_ts as u64)) as u32);
+    }
+
+    if glitches_only {
+        for stat in ss.iter_mut() {
+            if !stat.is_glitch() || sig_ref == clk_signal.unwrap() {
+                stat.clear();
+            }
+        }
     }
 
     // TODO: Figure out how the indexing direction is denoted

@@ -224,7 +224,8 @@ pub fn export<W>(
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
         remove_virtual_pins: ctx.remove_virtual_pins,
-        only_glitches: ctx.only_glitches
+        only_glitches: ctx.only_glitches,
+        clk_signal: ctx.clk_signal
     };
 
     let mut agent = SaifAgent::new(&ctx.stats, iteration, 1);

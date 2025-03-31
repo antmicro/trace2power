@@ -2,7 +2,7 @@ pub mod tcl;
 pub mod saif;
 
 use std::io::Write;
-use wellen::{GetItem, Scope, VarRef};
+use wellen::{GetItem, Scope, VarRef, SignalRef};
 use wellen::simple::Waveform;
 use crate::LookupPoint;
 use crate::netlist::{Netlist, Module, ModuleLookupError};
@@ -26,7 +26,8 @@ struct TraceVisitCtx<'b, 'w, 'n, W> where W: std::io::Write {
     netlist_prefix: Vec<String>,
     blackboxes_only: bool,
     remove_virtual_pins: bool,
-    only_glitches: bool
+    only_glitches: bool,
+    clk_signal: Option<SignalRef>
 }
 
 /// Traverses a hierarchy of scopes and variables loaded from a trace. For a given scope nets are
