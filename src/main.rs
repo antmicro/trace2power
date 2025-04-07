@@ -133,7 +133,6 @@ impl FromStr for OutputFormat {
 struct Context {
     wave: Waveform,
     clk_period: f64,
-    clk_signal: Option<SignalRef>,
     stats: HashMap<HashVarRef, Vec<PackedStats>>,
     num_of_iterations: u64,
     lookup_point: LookupPoint,
@@ -144,7 +143,6 @@ struct Context {
     top_scope: Option<ScopeRef>,
     blackboxes_only: bool,
     remove_virtual_pins: bool,
-    only_glitches: bool
 }
 
 impl Context {
@@ -235,10 +233,12 @@ impl Context {
             Some(clock_name) => {
                 let mut found: Option<SignalRef> = None;
 
-                for (var_ref, sig_ref) in all_vars.iter().zip(&all_signals) {
-                    let net = wave.hierarchy().get(*var_ref);
+                for var_ref in wave.hierarchy().var_refs_iter() {
+                    let sig_ref = wave.hierarchy().get(var_ref).signal_ref();
+                    let net = wave.hierarchy().get(var_ref);
                     if net.name(wave.hierarchy()) == clock_name {
-                        found = Some(*sig_ref)
+                        println!("{:?}", sig_ref);
+                        found = Some(sig_ref)
                     }
                 }
 
@@ -268,7 +268,6 @@ impl Context {
         Self {
             wave,
             clk_period,
-            clk_signal,
             stats,
             num_of_iterations,
             lookup_point,
@@ -283,8 +282,7 @@ impl Context {
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
             blackboxes_only: args.blackboxes_only,
-            remove_virtual_pins: args.remove_virtual_pins,
-            only_glitches: args.only_glitches
+            remove_virtual_pins: args.remove_virtual_pins
         }
     }
 }

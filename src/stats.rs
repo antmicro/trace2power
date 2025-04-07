@@ -186,7 +186,7 @@ pub fn calc_stats(
 
     if glitches_only {
         for stat in ss.iter_mut() {
-            if !stat.is_glitch() || sig_ref == clk_signal.unwrap() {
+            if !stat.is_glitch() || (clk_signal != None && sig_ref == clk_signal.unwrap()) {
                 stat.clear();
             }
         }
