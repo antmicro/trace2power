@@ -70,6 +70,9 @@ struct Cli {
     /// Write stats only for glitches
     #[arg(long)]
     only_glitches: bool,
+    /// Export without accumulation
+    #[arg(long)]
+    export_empty: bool,
     /// Path to SDC file
     #[arg(long)]
     sdc: Option<std::path::PathBuf>,
@@ -143,6 +146,7 @@ struct Context {
     top_scope: Option<ScopeRef>,
     blackboxes_only: bool,
     remove_virtual_pins: bool,
+    export_empty: bool
 }
 
 impl Context {
@@ -282,7 +286,8 @@ impl Context {
             top: args.top.clone().unwrap_or_else(String::new),
             top_scope,
             blackboxes_only: args.blackboxes_only,
-            remove_virtual_pins: args.remove_virtual_pins
+            remove_virtual_pins: args.remove_virtual_pins,
+            export_empty: args.export_empty
         }
     }
 }

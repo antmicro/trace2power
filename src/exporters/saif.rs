@@ -223,7 +223,8 @@ pub fn export<W>(
         netlist: ctx.netlist.as_ref(),
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
-        remove_virtual_pins: ctx.remove_virtual_pins
+        remove_virtual_pins: ctx.remove_virtual_pins,
+        export_empty: ctx.export_empty
     };
 
     let mut agent = SaifAgent::new(&ctx.stats, iteration, 1);
