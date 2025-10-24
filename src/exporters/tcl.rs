@@ -2,8 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::{collections::HashMap, hash::Hash};
-use rayon::prelude::*;
-use itertools::*;
 use wellen::{VarRef, GetItem};
 
 use crate::stats::{PackedStats, SignalStats};
