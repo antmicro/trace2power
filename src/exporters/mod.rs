@@ -29,7 +29,6 @@ struct TraceVisitCtx<'b, 'w, 'n, W> where W: std::io::Write {
     netlist_prefix: Vec<String>,
     blackboxes_only: bool,
     remove_virtual_pins: bool,
-    export_empty: bool
 }
 
 /// Traverses a hierarchy of scopes and variables loaded from a trace. For a given scope nets are

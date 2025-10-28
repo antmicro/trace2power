@@ -117,7 +117,6 @@ pub fn export<W>(
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
         remove_virtual_pins: ctx.remove_virtual_pins,
-        export_empty: ctx.export_empty
     };
 
     let mut agent = TclAgent::new(&ctx.stats, iteration);
