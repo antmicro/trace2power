@@ -17,11 +17,19 @@ The tool can export data into two distinct formats:
 will usually require providing a netlist file generated with
 [Yosys](https://github.com/YosysHQ/yosys).
 
-## Building
+## Installing
 
 `trace2power` requires [Rust](https://www.rust-lang.org/tools/install) 1.80.1 or newer.
 
-You can build the app and install it using
+You can install it using Cargo:
+
+```bash
+cargo install trace2power
+```
+
+## Building
+
+If you need a version that is not published on [crates.io](https://crates.io/), you can also clone the repository and build the app using:
 ```bash
 cargo install --path .
 ```
