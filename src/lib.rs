@@ -30,95 +30,58 @@ impl std::hash::Hash for HashVarRef {
 #[derive(Parser)]
 pub struct Args {
     /// Trace file
-    input_file: std::path::PathBuf,
+    pub input_file: std::path::PathBuf,
     /// Clock frequency (in Hz)
     #[arg(short, long, value_parser = clap::value_parser!(f64))]
-    clk_freq: f64,
+    pub clk_freq: f64,
     /// Clock signal name
     #[arg(long)]
-    clock_name: Option<String>,
+    pub clock_name: Option<String>,
     /// Format to extract data into
     #[arg(short = 'f', long, default_value = "tcl")]
-    output_format: OutputFormat,
+    pub output_format: OutputFormat,
     /// Scope in which signals should be looked for. By default it's the global hierarchy scope.
     #[arg(long, short)]
-    limit_scope: Option<String>,
+    pub limit_scope: Option<String>,
     /// Yosys JSON netlist of DUT. Can be used to identify ports of primitives when exporting data.
     /// Allows skipping unnecessary or unwanted signals
     #[arg(short, long)]
-    netlist: Option<std::path::PathBuf>,
+    pub netlist: Option<std::path::PathBuf>,
     /// Name of the top module (DUT)
     #[arg(short, long)]
-    top: Option<String>,
+    pub top: Option<String>,
     /// Scope at which the DUT is located. The loaded netlist will be rooted at this point.
     #[arg(short = 'T', long)]
-    top_scope: Option<String>,
+    pub top_scope: Option<String>,
     /// Export only nets from blackboxes (undefined modules) in provided netlist. Those are assumed
     /// to be post-synthesis primitives
     #[arg(short, long)]
-    blackboxes_only: bool,
+    pub blackboxes_only: bool,
     /// Remove nets that are in blackboxes and have suspicious names: "VGND", "VNB", "VPB", "VPWR".
     #[arg(long)]
-    remove_virtual_pins: bool,
+    pub remove_virtual_pins: bool,
     /// Write the output to a specified file instead of stdout.
     /// In case of per clock cycle output, it must be a directory.
     #[arg(short, long)]
-    output: Option<std::path::PathBuf>,
+    pub output: Option<std::path::PathBuf>,
     /// Ignore exporting current date.
     #[arg(long)]
-    ignore_date: bool,
+    pub ignore_date: bool,
     /// Ignore exporting current version.
     #[arg(long)]
-    ignore_version: bool,
+    pub ignore_version: bool,
     /// Accumulate stats for each clock cycle separately. Output path is required to be a directory.
     #[arg(long)]
-    per_clock_cycle: bool,
+    pub per_clock_cycle: bool,
     /// Write stats only for glitches
     #[arg(long)]
-    only_glitches: bool,
+    pub only_glitches: bool,
     /// Export without accumulation
     #[arg(long)]
-    export_empty: bool,
+    pub export_empty: bool,
 }
 
 impl Args {
-    pub fn new(
-        input_file: std::path::PathBuf,
-        clk_freq: f64,
-        clock_name: Option<String>,
-        output_format: OutputFormat,
-        limit_scope: Option<String>,
-        netlist: Option<std::path::PathBuf>,
-        top: Option<String>,
-        top_scope: Option<String>,
-        blackboxes_only: bool,
-        remove_virtual_pins: bool,
-        output: Option<std::path::PathBuf>,
-        ignore_date: bool,
-        ignore_version: bool,
-        per_clock_cycle: bool,
-        only_glitches: bool,
-        export_empty: bool,
-    ) -> Self {
-        Self {
-            input_file,
-            clk_freq,
-            clock_name,
-            output_format,
-            limit_scope,
-            netlist,
-            top,
-            top_scope,
-            blackboxes_only,
-            remove_virtual_pins,
-            output,
-            ignore_date,
-            ignore_version,
-            per_clock_cycle,
-            only_glitches,
-            export_empty,
-        }
-    }
     pub fn from_cli() -> Self {
         Args::parse()
     }
