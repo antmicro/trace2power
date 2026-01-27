@@ -1,6 +1,8 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use pretty_assertions::assert_eq;
+use std::fs;
 use std::path::PathBuf;
 use trace2power::process_single_iteration_trace;
 use trace2power::process_trace_iterations;
@@ -38,7 +40,7 @@ fn test_synth() {
         top_scope,
         blackboxes_only,
         remove_virtual_pins,
-        Option::Some(output),
+        Option::Some(output.clone()),
         ignore_date,
         ignore_version,
         per_clock_cycle,
@@ -51,4 +53,8 @@ fn test_synth() {
     } else {
         process_single_iteration_trace(&ctx, args.output);
     }
+
+    let golden = fs::read_to_string(r"tests/synth/synth.saif").expect("Golden file should exist");
+    let actual = fs::read_to_string(output.to_str().expect("Actual file should exist")).unwrap();
+    assert_eq!(golden, actual);
 }
