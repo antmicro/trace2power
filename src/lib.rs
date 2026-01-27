@@ -81,8 +81,47 @@ pub struct Cli {
     export_empty: bool,
 }
 
-pub fn parse_args() -> Cli {
-    Cli::parse()
+impl Cli {
+    pub fn new(
+        input_file: std::path::PathBuf,
+        clk_freq: f64,
+        clock_name: Option<String>,
+        output_format: OutputFormat,
+        limit_scope: Option<String>,
+        netlist: Option<std::path::PathBuf>,
+        top: Option<String>,
+        top_scope: Option<String>,
+        blackboxes_only: bool,
+        remove_virtual_pins: bool,
+        output: Option<std::path::PathBuf>,
+        ignore_date: bool,
+        ignore_version: bool,
+        per_clock_cycle: bool,
+        only_glitches: bool,
+        export_empty: bool,
+    ) -> Self {
+        Self {
+            input_file,
+            clk_freq,
+            clock_name,
+            output_format,
+            limit_scope,
+            netlist,
+            top,
+            top_scope,
+            blackboxes_only,
+            remove_virtual_pins,
+            output,
+            ignore_date,
+            ignore_version,
+            per_clock_cycle,
+            only_glitches,
+            export_empty,
+        }
+    }
+    pub fn from_cli() -> Self {
+        Cli::parse()
+    }
 }
 
 fn indexed_name(mut name: String, variable: &Var) -> String {
@@ -105,7 +144,7 @@ enum LookupPoint {
 }
 
 #[derive(Copy, Clone)]
-enum OutputFormat {
+pub enum OutputFormat {
     Tcl,
     Saif,
 }
