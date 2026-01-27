@@ -7,6 +7,10 @@ license = "Apache-2.0"
 repository = "https://github.com/antmicro/trace2power"
 exclude = [".ci.yml", ".github"]
 
+[lib]
+name = "trace2power"
+test = true
+
 [dependencies]
 wellen = "^0.12.2"
 rayon = "1.10.0"

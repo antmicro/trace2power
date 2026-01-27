@@ -1,0 +1,339 @@
+// Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
+// SPDX-License-Identifier: Apache-2.0
+
+use std::collections::HashMap;
+use std::str::FromStr;
+
+use clap::Parser;
+use rayon::prelude::*;
+use stats::PackedStats;
+use wellen::{self, simple::Waveform, GetItem, Hierarchy, ScopeRef, SignalRef, Var, VarRef};
+
+mod exporters;
+pub mod netlist;
+pub mod stats;
+pub mod util;
+
+use netlist::Netlist;
+use util::VarRefsIter;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct HashVarRef(VarRef);
+
+impl std::hash::Hash for HashVarRef {
+    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+        self.0.index().hash(state);
+    }
+}
+
+/// trace2power - Extract acccumulated power activity data from VCD/FST
+#[derive(Parser)]
+pub struct Cli {
+    /// Trace file
+    input_file: std::path::PathBuf,
+    /// Clock frequency (in Hz)
+    #[arg(short, long, value_parser = clap::value_parser!(f64))]
+    clk_freq: f64,
+    /// Clock signal name
+    #[arg(long)]
+    clock_name: Option<String>,
+    /// Format to extract data into
+    #[arg(short = 'f', long, default_value = "tcl")]
+    output_format: OutputFormat,
+    /// Scope in which signals should be looked for. By default it's the global hierarchy scope.
+    #[arg(long, short)]
+    limit_scope: Option<String>,
+    /// Yosys JSON netlist of DUT. Can be used to identify ports of primitives when exporting data.
+    /// Allows skipping unnecessary or unwanted signals
+    #[arg(short, long)]
+    netlist: Option<std::path::PathBuf>,
+    /// Name of the top module (DUT)
+    #[arg(short, long)]
+    top: Option<String>,
+    /// Scope at which the DUT is located. The loaded netlist will be rooted at this point.
+    #[arg(short = 'T', long)]
+    top_scope: Option<String>,
+    /// Export only nets from blackboxes (undefined modules) in provided netlist. Those are assumed
+    /// to be post-synthesis primitives
+    #[arg(short, long)]
+    blackboxes_only: bool,
+    /// Remove nets that are in blackboxes and have suspicious names: "VGND", "VNB", "VPB", "VPWR".
+    #[arg(long)]
+    remove_virtual_pins: bool,
+    /// Write the output to a specified file instead of stdout.
+    /// In case of per clock cycle output, it must be a directory.
+    #[arg(short, long)]
+    pub output: Option<std::path::PathBuf>,
+    /// Ignore exporting current date.
+    #[arg(long)]
+    ignore_date: bool,
+    /// Ignore exporting current version.
+    #[arg(long)]
+    ignore_version: bool,
+    /// Accumulate stats for each clock cycle separately. Output path is required to be a directory.
+    #[arg(long)]
+    per_clock_cycle: bool,
+    /// Write stats only for glitches
+    #[arg(long)]
+    only_glitches: bool,
+    /// Export without accumulation
+    #[arg(long)]
+    export_empty: bool,
+}
+
+pub fn parse_args() -> Cli {
+    Cli::parse()
+}
+
+fn indexed_name(mut name: String, variable: &Var) -> String {
+    if let Some(idx) = variable.index() {
+        name += format!("[{}]", idx.lsb()).as_str();
+    }
+    name
+}
+
+fn get_scope_by_full_name(hier: &Hierarchy, scope_str: &str) -> Option<ScopeRef> {
+    hier.lookup_scope(scope_str.split('.').collect::<Vec<_>>().as_slice())
+}
+
+/// Represents a pointin hierarchy - either a scope or top-level hierarchy as they are distinct for
+/// some reason
+#[derive(Copy, Clone)]
+enum LookupPoint {
+    Top,
+    Scope(ScopeRef),
+}
+
+#[derive(Copy, Clone)]
+enum OutputFormat {
+    Tcl,
+    Saif,
+}
+
+impl clap::ValueEnum for OutputFormat {
+    fn value_variants<'a>() -> &'a [Self] {
+        &[Self::Tcl, Self::Saif]
+    }
+    fn to_possible_value(&self) -> Option<clap::builder::PossibleValue> {
+        use clap::builder::PossibleValue;
+        match self {
+            Self::Tcl => Some(PossibleValue::new("tcl")),
+            Self::Saif => Some(PossibleValue::new("saif")),
+        }
+    }
+}
+
+impl FromStr for OutputFormat {
+    type Err = std::io::Error;
+    fn from_str(s: &str) -> Result<Self, Self::Err> {
+        match s.to_lowercase().as_str() {
+            "tcl" => Ok(Self::Tcl),
+            "saif" => Ok(Self::Saif),
+            other @ _ => Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!(
+                    "Format {} is not a valid output format forthis program",
+                    other
+                ),
+            )),
+        }
+    }
+}
+
+pub struct Context {
+    wave: Waveform,
+    clk_period: f64,
+    stats: HashMap<HashVarRef, Vec<PackedStats>>,
+    pub num_of_iterations: u64,
+    lookup_point: LookupPoint,
+    output_fmt: OutputFormat,
+    scope_prefix_length: usize,
+    netlist: Option<Netlist>,
+    top: String,
+    top_scope: Option<ScopeRef>,
+    blackboxes_only: bool,
+    remove_virtual_pins: bool,
+    ignore_date: bool,
+    ignore_version: bool,
+    export_empty: bool,
+}
+
+impl Context {
+    pub fn build_from_args(args: &Cli) -> Self {
+        const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
+            multi_thread: true,
+            remove_scopes_with_empty_name: false,
+        };
+
+        let mut wave = wellen::simple::read_with_options(
+            args.input_file
+                .to_str()
+                .expect("Arguments should contain a path to input trace file"),
+            &LOAD_OPTS,
+        )
+        .expect("Waveform parsing should end successfully");
+
+        let wave_hierarchy = wave.hierarchy();
+
+        let clk_period = 1.0_f64 / args.clk_freq;
+        let timescale = wave_hierarchy
+            .timescale()
+            .expect("Trace file should contain a timescale");
+        let timescale_norm = (timescale.factor as f64)
+            * (10.0_f64).powf(
+                timescale
+                    .unit
+                    .to_exponent()
+                    .expect("Waveform should contain time unit") as f64,
+            );
+
+        let lookup_point = match &args.limit_scope {
+            None => LookupPoint::Top,
+            Some(scope_str) => LookupPoint::Scope(
+                get_scope_by_full_name(wave_hierarchy, scope_str)
+                    .expect("Requested scope not found"),
+            ),
+        };
+
+        let lookup_scope_name_prefix = match lookup_point {
+            LookupPoint::Top => "".to_string(),
+            LookupPoint::Scope(scope_ref) => {
+                let scope = wave_hierarchy.get(scope_ref);
+                scope.full_name(wave_hierarchy).to_string() + "."
+            }
+        };
+
+        let (all_vars, all_signals): (Vec<_>, Vec<_>) = match lookup_point {
+            LookupPoint::Top => wave_hierarchy
+                .var_refs_iter()
+                .map(|var_ref| (var_ref, wave_hierarchy.get(var_ref).signal_ref()))
+                .unzip(),
+            LookupPoint::Scope(_) => wave_hierarchy
+                .var_refs_iter()
+                .map(|var_ref| (var_ref, wave_hierarchy.get(var_ref)))
+                .filter(|(_, var)| {
+                    let fname = indexed_name(var.full_name(wave_hierarchy.into()), var);
+                    fname.starts_with(&lookup_scope_name_prefix)
+                })
+                .map(|(var_ref, var)| (var_ref, var.signal_ref()))
+                .unzip(),
+        };
+
+        let clk_signal: Option<SignalRef> = match &args.clock_name {
+            None => None,
+            Some(clock_name) => {
+                let mut found: Option<SignalRef> = None;
+
+                for var_ref in wave_hierarchy.var_refs_iter() {
+                    let net = wave_hierarchy.get(var_ref);
+                    let sig_ref = net.signal_ref();
+                    if net.name(wave_hierarchy) == clock_name {
+                        found = Some(sig_ref)
+                    }
+                }
+
+                found
+            }
+        };
+
+        wave.load_signals_multi_threaded(&all_signals);
+
+        let last_time_stamp = *wave
+            .time_table()
+            .last()
+            .expect("Given waveform shouldn't be empty");
+        let num_of_iterations = if args.per_clock_cycle {
+            (last_time_stamp as f64 * timescale_norm / clk_period) as u64
+        } else {
+            1
+        };
+
+        // TODO: A massive optimization that can be done here is to calculate stats only
+        // for exported signals instead of all nets
+        // It's easy to do with the current implementation of DFS (see src/exporter/mod.rs).
+        // However it's single-threaded and parallelizing it efficiently is non-trivial.
+        let stats: HashMap<HashVarRef, Vec<stats::PackedStats>> = all_vars
+            .par_iter()
+            .zip(all_signals)
+            .map(|(var_ref, sig_ref)| {
+                (
+                    HashVarRef(*var_ref),
+                    stats::calc_stats_for_each_time_span(
+                        &wave,
+                        args.only_glitches,
+                        clk_signal,
+                        sig_ref,
+                        num_of_iterations,
+                    ),
+                )
+            })
+            .collect();
+
+        let top_scope = args.top_scope.as_ref().map(|s| {
+            get_scope_by_full_name(wave.hierarchy(), s)
+                .unwrap_or_else(|| panic!("Couldn't find top scope `{}`", s))
+        });
+
+        Self {
+            wave,
+            clk_period,
+            stats,
+            num_of_iterations,
+            lookup_point,
+            output_fmt: args.output_format,
+            scope_prefix_length: lookup_scope_name_prefix.len(),
+            netlist: args.netlist.as_ref().map(|path| {
+                let f = std::fs::File::open(path).expect("Couldn't open the netlist file");
+                let reader = std::io::BufReader::new(f);
+                serde_json::from_reader::<_, Netlist>(reader)
+                    .expect("Couldn't parse the netlist file")
+            }),
+            top: args.top.clone().unwrap_or_else(String::new),
+            top_scope,
+            blackboxes_only: args.blackboxes_only,
+            remove_virtual_pins: args.remove_virtual_pins,
+            ignore_date: args.ignore_date,
+            ignore_version: args.ignore_version,
+            export_empty: args.export_empty,
+        }
+    }
+}
+
+fn process_trace<W>(ctx: &Context, out: W, iteration: usize)
+where
+    W: std::io::Write,
+{
+    match &ctx.output_fmt {
+        OutputFormat::Tcl => exporters::tcl::export(&ctx, out, iteration),
+        OutputFormat::Saif => exporters::saif::export(&ctx, out, iteration),
+    }
+    .expect("Output format should be either 'tcl' or 'saif'")
+}
+
+pub fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+    if output_path == None {
+        panic!("Output is saved as separate files, so you must specify a path to a directory")
+    }
+
+    let mut path = output_path.expect("Output path should be valid");
+
+    // TODO: multithreading can also be introduced here to process each iteration in parallel
+    for iteration in 0..ctx.num_of_iterations as usize {
+        path.push(format!("{:05}", iteration));
+        let f = std::fs::File::create(&path).expect("Created file should be valid");
+        let writer = std::io::BufWriter::new(f);
+        process_trace(&ctx, writer, iteration);
+        path.pop();
+    }
+}
+
+pub fn process_single_iteration_trace(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+    match output_path {
+        None => process_trace(&ctx, std::io::stdout(), 0),
+        Some(ref path) => {
+            let f = std::fs::File::create(path).expect("Created file should be valid");
+            let writer = std::io::BufWriter::new(f);
+            process_trace(&ctx, writer, 0);
+        }
+    }
+}
