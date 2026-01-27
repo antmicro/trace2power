@@ -4,22 +4,20 @@
 use pretty_assertions::assert_eq;
 use std::fs;
 use std::path::PathBuf;
-use trace2power::process_single_iteration_trace;
-use trace2power::process_trace_iterations;
-use trace2power::Cli;
-use trace2power::Context;
+use trace2power::process;
+use trace2power::Args;
 use trace2power::OutputFormat;
 
 #[test]
 fn test_synth() {
     let input_file = PathBuf::from(r"tests/synth/counter.vcd");
     let clk_freq = 500000000.0;
-    let clock_name = Option::None;
+    let clock_name = None;
     let output_format = OutputFormat::Saif;
-    let limit_scope = Option::Some(String::from("counter_tb.counter0"));
-    let netlist = Option::Some(PathBuf::from(r"tests/synth/counter.json"));
-    let top = Option::None;
-    let top_scope = Option::None;
+    let limit_scope = Some(String::from("counter_tb.counter0"));
+    let netlist = Some(PathBuf::from(r"tests/synth/counter.json"));
+    let top = None;
+    let top_scope = None;
     let blackboxes_only = false;
     let remove_virtual_pins = true;
     let output = PathBuf::from(r"tests/synth/out.saif");
@@ -29,7 +27,7 @@ fn test_synth() {
     let per_clock_cycle = false;
     let only_glitches = false;
     let export_empty = false;
-    let args = Cli::new(
+    let args = Args::new(
         input_file,
         clk_freq,
         clock_name,
@@ -40,19 +38,15 @@ fn test_synth() {
         top_scope,
         blackboxes_only,
         remove_virtual_pins,
-        Option::Some(output.clone()),
+        Some(output.clone()),
         ignore_date,
         ignore_version,
         per_clock_cycle,
         only_glitches,
         export_empty,
     );
-    let ctx = Context::build_from_args(&args);
-    if ctx.num_of_iterations > 1 {
-        process_trace_iterations(&ctx, args.output);
-    } else {
-        process_single_iteration_trace(&ctx, args.output);
-    }
+
+    process(args);
 
     let golden = fs::read_to_string(r"tests/synth/synth.saif").expect("Golden file should exist");
     let actual = fs::read_to_string(output.to_str().expect("Actual file should exist")).unwrap();

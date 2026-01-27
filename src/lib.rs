@@ -28,7 +28,7 @@ impl std::hash::Hash for HashVarRef {
 
 /// trace2power - Extract acccumulated power activity data from VCD/FST
 #[derive(Parser)]
-pub struct Cli {
+pub struct Args {
     /// Trace file
     input_file: std::path::PathBuf,
     /// Clock frequency (in Hz)
@@ -63,7 +63,7 @@ pub struct Cli {
     /// Write the output to a specified file instead of stdout.
     /// In case of per clock cycle output, it must be a directory.
     #[arg(short, long)]
-    pub output: Option<std::path::PathBuf>,
+    output: Option<std::path::PathBuf>,
     /// Ignore exporting current date.
     #[arg(long)]
     ignore_date: bool,
@@ -81,7 +81,7 @@ pub struct Cli {
     export_empty: bool,
 }
 
-impl Cli {
+impl Args {
     pub fn new(
         input_file: std::path::PathBuf,
         clk_freq: f64,
@@ -120,7 +120,7 @@ impl Cli {
         }
     }
     pub fn from_cli() -> Self {
-        Cli::parse()
+        Args::parse()
     }
 }
 
@@ -179,7 +179,7 @@ impl FromStr for OutputFormat {
     }
 }
 
-pub struct Context {
+struct Context {
     wave: Waveform,
     clk_period: f64,
     stats: HashMap<HashVarRef, Vec<PackedStats>>,
@@ -198,7 +198,7 @@ pub struct Context {
 }
 
 impl Context {
-    pub fn build_from_args(args: &Cli) -> Self {
+    pub fn build_from_args(args: &Args) -> Self {
         const LOAD_OPTS: wellen::LoadOptions = wellen::LoadOptions {
             multi_thread: true,
             remove_scopes_with_empty_name: false,
@@ -338,6 +338,15 @@ impl Context {
     }
 }
 
+pub fn process(args: Args) {
+    let ctx = Context::build_from_args(&args);
+    if ctx.num_of_iterations > 1 {
+        process_trace_iterations(&ctx, args.output);
+    } else {
+        process_single_iteration_trace(&ctx, args.output);
+    }
+}
+
 fn process_trace<W>(ctx: &Context, out: W, iteration: usize)
 where
     W: std::io::Write,
@@ -349,7 +358,7 @@ where
     .expect("Output format should be either 'tcl' or 'saif'")
 }
 
-pub fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::PathBuf>) {
     if output_path == None {
         panic!("Output is saved as separate files, so you must specify a path to a directory")
     }
@@ -366,7 +375,7 @@ pub fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::Pa
     }
 }
 
-pub fn process_single_iteration_trace(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+fn process_single_iteration_trace(ctx: &Context, output_path: Option<std::path::PathBuf>) {
     match output_path {
         None => process_trace(&ctx, std::io::stdout(), 0),
         Some(ref path) => {
