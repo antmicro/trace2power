@@ -45,7 +45,8 @@ build_release:
   stage: tests
   before_script:
   - apt -qqy update &> /dev/null
-  - apt -y install gzip tar build-essential iverilog time
+  - apt -y install curl gzip tar build-essential iverilog time
+  - curl https://sh.rustup.rs -sSf | sh -s -- -y
   artifacts:
     when: always
     paths:
@@ -58,6 +59,8 @@ test_debug:
   - export EXAMPLES_DIRECTORY=$(pwd)/examples
   - export PATH=$PATH:$(pwd)/target/debug
   - make -C tests
+  - source $HOME/.cargo/env
+  - cargo test
   dependencies: [build_debug]
 
 test_release:
@@ -66,4 +69,6 @@ test_release:
   - export EXAMPLES_DIRECTORY=$(pwd)/examples
   - export PATH=$PATH:$(pwd)/target/release
   - make -C tests
+  - source $HOME/.cargo/env
+  - cargo test --release
   dependencies: [build_release]
