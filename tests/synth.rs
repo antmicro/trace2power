@@ -3,7 +3,9 @@
 
 use pretty_assertions::assert_eq;
 use std::fs;
+use std::io::Read;
 use std::path::PathBuf;
+use tempfile::NamedTempFile;
 use trace2power::process;
 use trace2power::Args;
 use trace2power::OutputFormat;
@@ -20,8 +22,7 @@ fn test_synth() {
     let top_scope = None;
     let blackboxes_only = false;
     let remove_virtual_pins = true;
-    let output = PathBuf::from(r"tests/synth/out.saif");
-    std::fs::File::create(&output).expect("Created file should be valid");
+    let mut output = NamedTempFile::new().expect("Failed to allocate temp file");
     let ignore_date = true;
     let ignore_version = true;
     let per_clock_cycle = false;
@@ -38,7 +39,7 @@ fn test_synth() {
         top_scope,
         blackboxes_only,
         remove_virtual_pins,
-        Some(output.clone()),
+        Some(output.path().to_path_buf()),
         ignore_date,
         ignore_version,
         per_clock_cycle,
@@ -49,6 +50,9 @@ fn test_synth() {
     process(args);
 
     let golden = fs::read_to_string(r"tests/synth/synth.saif").expect("Golden file should exist");
-    let actual = fs::read_to_string(output.to_str().expect("Actual file should exist")).unwrap();
-    assert_eq!(golden, actual);
+    let mut actual = String::new();
+    output
+        .read_to_string(&mut actual)
+        .expect("Actual file should exist");
+    assert_eq!(actual, golden);
 }
