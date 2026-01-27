@@ -55,7 +55,7 @@ fn test_synth_saif() {
 
     process(common.args);
 
-    let golden = fs::read_to_string(r"tests/synth/synth.saif").expect("Golden file should exist");
+    let golden = include_str!("synth/synth.saif");
     let mut actual = String::new();
     common
         .output_file
@@ -70,17 +70,16 @@ fn test_synth_tcl() {
 
     process(common.args);
 
-    let mut golden =
-        fs::read_to_string(r"tests/synth/synth.tcl").expect("Golden file should exist");
+    let golden = include_str!("synth/synth.tcl");
     let mut actual = String::new();
     common
         .output_file
         .read_to_string(&mut actual)
         .expect("Actual file should exist");
-    assert_eq!(sort_tcl(&mut actual), sort_tcl(&mut golden));
+    assert_eq!(sort_tcl(actual), sort_tcl(String::from(golden)));
 }
 
-fn sort_tcl(input: &mut String) -> String {
+fn sort_tcl(input: String) -> String {
     let mut lines: Vec<&str> = input.lines().collect();
 
     fn key(s: &str) -> Vec<u8> {
