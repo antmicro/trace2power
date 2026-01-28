@@ -1,8 +1,9 @@
 // Copyright (c) 2024-2025 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use std::collections::HashMap;
 use std::str::FromStr;
+use std::{collections::HashMap, io};
+use std::{fs, hash, path};
 
 use clap::Parser;
 use rayon::prelude::*;
@@ -20,8 +21,8 @@ use util::VarRefsIter;
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 struct HashVarRef(VarRef);
 
-impl std::hash::Hash for HashVarRef {
-    fn hash<H: std::hash::Hasher>(&self, state: &mut H) {
+impl hash::Hash for HashVarRef {
+    fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.0.index().hash(state);
     }
 }
@@ -30,7 +31,7 @@ impl std::hash::Hash for HashVarRef {
 #[derive(Parser)]
 pub struct Args {
     /// Trace file
-    pub input_file: std::path::PathBuf,
+    pub input_file: path::PathBuf,
     /// Clock frequency (in Hz)
     #[arg(short, long, value_parser = clap::value_parser!(f64))]
     pub clk_freq: f64,
@@ -46,7 +47,7 @@ pub struct Args {
     /// Yosys JSON netlist of DUT. Can be used to identify ports of primitives when exporting data.
     /// Allows skipping unnecessary or unwanted signals
     #[arg(short, long)]
-    pub netlist: Option<std::path::PathBuf>,
+    pub netlist: Option<path::PathBuf>,
     /// Name of the top module (DUT)
     #[arg(short, long)]
     pub top: Option<String>,
@@ -63,7 +64,7 @@ pub struct Args {
     /// Write the output to a specified file instead of stdout.
     /// In case of per clock cycle output, it must be a directory.
     #[arg(short, long)]
-    pub output: Option<std::path::PathBuf>,
+    pub output: Option<path::PathBuf>,
     /// Ignore exporting current date.
     #[arg(long)]
     pub ignore_date: bool,
@@ -126,13 +127,13 @@ impl clap::ValueEnum for OutputFormat {
 }
 
 impl FromStr for OutputFormat {
-    type Err = std::io::Error;
+    type Err = io::Error;
     fn from_str(s: &str) -> Result<Self, Self::Err> {
         match s.to_lowercase().as_str() {
             "tcl" => Ok(Self::Tcl),
             "saif" => Ok(Self::Saif),
-            other @ _ => Err(std::io::Error::new(
-                std::io::ErrorKind::InvalidInput,
+            other @ _ => Err(io::Error::new(
+                io::ErrorKind::InvalidInput,
                 format!(
                     "Format {} is not a valid output format forthis program",
                     other
@@ -285,8 +286,8 @@ impl Context {
             output_fmt: args.output_format,
             scope_prefix_length: lookup_scope_name_prefix.len(),
             netlist: args.netlist.as_ref().map(|path| {
-                let f = std::fs::File::open(path).expect("Couldn't open the netlist file");
-                let reader = std::io::BufReader::new(f);
+                let f = fs::File::open(path).expect("Couldn't open the netlist file");
+                let reader = io::BufReader::new(f);
                 serde_json::from_reader::<_, Netlist>(reader)
                     .expect("Couldn't parse the netlist file")
             }),
@@ -312,7 +313,7 @@ pub fn process(args: Args) {
 
 fn process_trace<W>(ctx: &Context, out: W, iteration: usize)
 where
-    W: std::io::Write,
+    W: io::Write,
 {
     match &ctx.output_fmt {
         OutputFormat::Tcl => exporters::tcl::export(&ctx, out, iteration),
@@ -321,7 +322,7 @@ where
     .expect("Output format should be either 'tcl' or 'saif'")
 }
 
-fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+fn process_trace_iterations(ctx: &Context, output_path: Option<path::PathBuf>) {
     if output_path == None {
         panic!("Output is saved as separate files, so you must specify a path to a directory")
     }
@@ -331,19 +332,19 @@ fn process_trace_iterations(ctx: &Context, output_path: Option<std::path::PathBu
     // TODO: multithreading can also be introduced here to process each iteration in parallel
     for iteration in 0..ctx.num_of_iterations as usize {
         path.push(format!("{:05}", iteration));
-        let f = std::fs::File::create(&path).expect("Created file should be valid");
-        let writer = std::io::BufWriter::new(f);
+        let f = fs::File::create(&path).expect("Created file should be valid");
+        let writer = io::BufWriter::new(f);
         process_trace(&ctx, writer, iteration);
         path.pop();
     }
 }
 
-fn process_single_iteration_trace(ctx: &Context, output_path: Option<std::path::PathBuf>) {
+fn process_single_iteration_trace(ctx: &Context, output_path: Option<path::PathBuf>) {
     match output_path {
-        None => process_trace(&ctx, std::io::stdout(), 0),
+        None => process_trace(&ctx, io::stdout(), 0),
         Some(ref path) => {
-            let f = std::fs::File::create(path).expect("Created file should be valid");
-            let writer = std::io::BufWriter::new(f);
+            let f = fs::File::create(path).expect("Created file should be valid");
+            let writer = io::BufWriter::new(f);
             process_trace(&ctx, writer, 0);
         }
     }
