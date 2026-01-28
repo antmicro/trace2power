@@ -2,7 +2,6 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use pretty_assertions::assert_eq;
-use std::fs;
 use std::io::Read;
 use tempfile::NamedTempFile;
 
@@ -79,6 +78,7 @@ fn test_synth_tcl() {
     assert_eq!(sort_tcl(actual), sort_tcl(String::from(golden)));
 }
 
+// TODO remove once grouped_stats would be iterated in a deterministic way
 fn sort_tcl(input: String) -> String {
     let mut lines: Vec<&str> = input.lines().collect();
 

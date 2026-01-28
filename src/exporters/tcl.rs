@@ -133,6 +133,7 @@ pub fn export<W>(
         (timescale.factor as f64) * (10.0_f64).powf(timescale.unit.to_exponent().expect("Waveform should contain a time unit") as f64);
 
     writeln!(out, "proc set_pin_activity_and_duty {{}} {{")?;
+    // TODO iterate over grouped_stats in deterministic order
     for (stats, pins) in agent.grouped_stats {
         let (duty, activity) = if ctx.export_empty {
             (0.0, 0.0)
