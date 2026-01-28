@@ -1,4 +1,4 @@
-// Copyright (c) 2025 Antmicro <www.antmicro.com>
+// Copyright (c) 2025-2026 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
 (* src = "/ci/examples/counter/counter.v:4.1-28.10" *)

@@ -1,6 +1,6 @@
 # trace2power
 
-Copyright (c) 2024-2025 [Antmicro](https://antmicro.com)
+Copyright (c) 2024-2026 [Antmicro](https://antmicro.com)
 
 **trace2power** reads VCD and FST signal traces and extracts accumulated power
 activity data for use with power analysis tools.
