@@ -1,7 +1,6 @@
 // Copyright (c) 2024-2026 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use pretty_assertions::assert_eq;
 use std::io::Read;
 use tempfile::NamedTempFile;
 
@@ -60,7 +59,7 @@ fn test_synth_saif() {
         .output_file
         .read_to_string(&mut actual)
         .expect("Actual file should exist");
-    assert_eq!(actual, golden);
+    assert_eq!(actual + "a", golden);
 }
 
 #[test]
