@@ -311,10 +311,7 @@ pub fn process(args: Args) {
     }
 }
 
-fn process_trace<W>(ctx: &Context, out: W, iteration: usize)
-where
-    W: io::Write,
-{
+fn process_trace(ctx: &Context, out: impl io::Write, iteration: usize) {
     match &ctx.output_fmt {
         OutputFormat::Tcl => exporters::tcl::export(&ctx, out, iteration),
         OutputFormat::Saif => exporters::saif::export(&ctx, out, iteration),
