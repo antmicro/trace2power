@@ -320,19 +320,20 @@ fn process_trace(ctx: &Context, out: impl io::Write, iteration: usize) {
 }
 
 fn process_trace_iterations(ctx: &Context, output_path: Option<path::PathBuf>) {
-    if output_path == None {
-        panic!("Output is saved as separate files, so you must specify a path to a directory")
-    }
-
-    let mut path = output_path.expect("Output path should be valid");
-
-    // TODO: multithreading can also be introduced here to process each iteration in parallel
-    for iteration in 0..ctx.num_of_iterations as usize {
-        path.push(format!("{:05}", iteration));
-        let f = fs::File::create(&path).expect("Created file should be valid");
-        let writer = io::BufWriter::new(f);
-        process_trace(&ctx, writer, iteration);
-        path.pop();
+    if let Some(mut path) = output_path {
+        // TODO: multithreading can also be introduced here to process each iteration in parallel
+        for iteration in 0..ctx.num_of_iterations as usize {
+            path.push(format!("{:05}", iteration));
+            let f = fs::File::create(&path).expect("Created file should be valid");
+            let writer = io::BufWriter::new(f);
+            process_trace(&ctx, writer, iteration);
+            path.pop();
+        }
+    } else {
+        for iteration in 0..ctx.num_of_iterations as usize {
+            println!("{1} Iteration {:05} {1}", iteration, str::repeat("-", 10));
+            process_trace(&ctx, io::stdout(), iteration);
+        }
     }
 }
 
