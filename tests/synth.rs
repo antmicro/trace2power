@@ -9,21 +9,7 @@ use trace2power::process;
 use trace2power::Args;
 use trace2power::OutputFormat;
 
-struct Common {
-    args: Args,
-    output_file: NamedTempFile,
-}
-
-impl Common {
-    fn new() -> Self {
-        let output_file = NamedTempFile::new().expect("Failed to allocate temp file");
-        Common {
-            args: common_args(output_file.path().to_path_buf()),
-            output_file,
-        }
-    }
-}
-fn common_args(output_file: PathBuf) -> Args {
+fn common_args(output_file: &NamedTempFile) -> Args {
     Args {
         input_file: PathBuf::from(r"tests/synth/counter.vcd"),
         clk_freq: 500000000.0,
@@ -35,7 +21,7 @@ fn common_args(output_file: PathBuf) -> Args {
         top_scope: None,
         blackboxes_only: false,
         remove_virtual_pins: true,
-        output: Some(output_file),
+        output: Some(output_file.path().to_path_buf()),
         ignore_date: false,
         ignore_version: false,
         per_clock_cycle: false,
@@ -46,32 +32,32 @@ fn common_args(output_file: PathBuf) -> Args {
 
 #[test]
 fn test_synth_saif() {
-    let mut common = Common::new();
-    common.args.output_format = OutputFormat::Saif;
-    common.args.ignore_date = true;
-    common.args.ignore_version = true;
+    let mut output_file = NamedTempFile::new().expect("Failed to allocate temp file");
+    let mut args = common_args(&output_file);
+    args.output_format = OutputFormat::Saif;
+    args.ignore_date = true;
+    args.ignore_version = true;
 
-    process(common.args);
+    process(args);
 
     let golden = include_str!("synth/synth.saif");
     let mut actual = String::new();
-    common
-        .output_file
+    output_file
         .read_to_string(&mut actual)
         .expect("Actual file should exist");
-    assert_eq!(actual + "a", golden);
+    assert_eq!(actual, golden);
 }
 
 #[test]
 fn test_synth_tcl() {
-    let mut common = Common::new();
+    let mut output_file = NamedTempFile::new().expect("Failed to allocate temp file");
+    let args = common_args(&output_file);
 
-    process(common.args);
+    process(args);
 
     let golden = include_str!("synth/synth.tcl");
     let mut actual = String::new();
-    common
-        .output_file
+    output_file
         .read_to_string(&mut actual)
         .expect("Actual file should exist");
     assert_eq!(sort_tcl(actual), sort_tcl(String::from(golden)));
