@@ -8,7 +8,7 @@ use std::{fs, hash, path};
 use clap::Parser;
 use rayon::prelude::*;
 use stats::PackedStats;
-use wellen::{self, simple::Waveform, GetItem, Hierarchy, ScopeRef, SignalRef, Var, VarRef};
+use wellen::{self, GetItem, Hierarchy, ScopeRef, SignalRef, Var, VarRef, simple::Waveform};
 
 mod exporters;
 pub mod netlist;

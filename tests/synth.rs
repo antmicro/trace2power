@@ -5,9 +5,9 @@ use std::io::Read;
 use tempfile::NamedTempFile;
 
 use std::path::PathBuf;
-use trace2power::process;
 use trace2power::Args;
 use trace2power::OutputFormat;
+use trace2power::process;
 
 fn common_args(output_file: &NamedTempFile) -> Args {
     Args {

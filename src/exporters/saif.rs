@@ -1,15 +1,15 @@
 // Copyright (c) 2024-2026 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use chrono::Utc;
-use std::collections::HashMap;
-use indoc::indoc;
-use wellen::{GetItem, TimescaleUnit, Scope, VarRef};
-use crate::{indexed_name, Context};
 use crate::stats::{PackedStats, SignalStats};
+use crate::{Context, indexed_name};
+use chrono::Utc;
+use indoc::indoc;
+use std::collections::HashMap;
+use wellen::{GetItem, Scope, TimescaleUnit, VarRef};
 
+use super::{TraceVisit, TraceVisitCtx, TraceVisitorAgent};
 use crate::HashVarRef;
-use super::{TraceVisitorAgent, TraceVisit, TraceVisitCtx};
 
 struct DisplayTimescaleUnit(TimescaleUnit);
 
@@ -23,7 +23,7 @@ impl std::fmt::Display for DisplayTimescaleUnit {
             MicroSeconds => "us",
             MilliSeconds => "ms",
             Seconds => "s",
-            Unknown => panic!("Unknown time unit")
+            Unknown => panic!("Unknown time unit"),
         };
         f.write_str(s)
     }
@@ -39,11 +39,15 @@ struct SaifAgent<'a> {
     stats: &'a HashMap<HashVarRef, Vec<PackedStats>>,
     span_index: usize,
     scope_ctx: Vec<ScopeCtx>,
-    indent: usize
+    indent: usize,
 }
 
 impl<'a> SaifAgent<'a> {
-    fn new(stats: &'a HashMap<HashVarRef, Vec<PackedStats>>, span_index: usize, indent: usize) -> Self {
+    fn new(
+        stats: &'a HashMap<HashVarRef, Vec<PackedStats>>,
+        span_index: usize,
+        indent: usize,
+    ) -> Self {
         Self {
             stats,
             span_index,
@@ -54,8 +58,16 @@ impl<'a> SaifAgent<'a> {
 }
 
 impl<'a> SaifAgent<'a> {
-    fn get_ctx<'s>(&'s self) -> &'s ScopeCtx { self.scope_ctx.last().expect("Scope context should be valid") }
-    fn get_ctx_mut<'s>(&'s mut self) -> &'s mut ScopeCtx { self.scope_ctx.last_mut().expect("Scope context should be valid") }
+    fn get_ctx<'s>(&'s self) -> &'s ScopeCtx {
+        self.scope_ctx
+            .last()
+            .expect("Scope context should be valid")
+    }
+    fn get_ctx_mut<'s>(&'s mut self) -> &'s mut ScopeCtx {
+        self.scope_ctx
+            .last_mut()
+            .expect("Scope context should be valid")
+    }
     fn get_parent_ctx_mut<'s>(&'s mut self) -> Option<&'s mut ScopeCtx> {
         let len = self.scope_ctx.len();
         if len >= 2 {
@@ -65,7 +77,10 @@ impl<'a> SaifAgent<'a> {
         }
     }
 
-    fn write_indent<W>(&self, out: &mut W) -> std::io::Result<()> where W: std::io::Write {
+    fn write_indent<W>(&self, out: &mut W) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
         for _ in 0..self.indent {
             write!(out, "  ")?;
         }
@@ -73,24 +88,32 @@ impl<'a> SaifAgent<'a> {
     }
 
     fn begin_scope<W>(&mut self, out: &mut W, params: &str) -> std::io::Result<()>
-        where W: std::io::Write
+    where
+        W: std::io::Write,
     {
         self.write_indent(out)?;
         self.indent += 1;
         write!(out, "({params}\n")
     }
 
-    fn end_scope<W>(&mut self, out: &mut W) -> std::io::Result<()> where W: std::io::Write {
+    fn end_scope<W>(&mut self, out: &mut W) -> std::io::Result<()>
+    where
+        W: std::io::Write,
+    {
         self.indent -= 1;
         self.write_indent(out)?;
         write!(out, ")\n")
     }
 
-    fn write_net_stat<W, S>(&self, ctx: &mut TraceVisitCtx<W>, name: S, stat: &SignalStats)
-        -> Result<(), std::io::Error>
+    fn write_net_stat<W, S>(
+        &self,
+        ctx: &mut TraceVisitCtx<W>,
+        name: S,
+        stat: &SignalStats,
+    ) -> Result<(), std::io::Error>
     where
         W: std::io::Write,
-        S: Into<String>
+        S: Into<String>,
     {
         self.write_indent(ctx.out)?;
         write!(
@@ -105,15 +128,19 @@ impl<'a> SaifAgent<'a> {
             stat.glitch_trans_count
         )
     }
-
 }
 
-impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
+impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w>
+where
+    W: std::io::Write,
+{
     type Error = std::io::Error;
 
-    fn enter_net(&mut self, ctx: &mut TraceVisitCtx<W>, var_ref: VarRef)
-        -> Result<(), Self::Error>
-    {
+    fn enter_net(
+        &mut self,
+        ctx: &mut TraceVisitCtx<W>,
+        var_ref: VarRef,
+    ) -> Result<(), Self::Error> {
         let net = ctx.waveform.hierarchy().get(var_ref);
 
         if self.get_ctx().instance_empty {
@@ -129,9 +156,11 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
                 let name = indexed_name(net.name(ctx.waveform.hierarchy()).into(), net);
                 self.write_net_stat(ctx, name, stat)?;
             }
-            PackedStats::Vector(stats) => for (idx, stat) in stats.iter().enumerate() {
-                let name = format!("{}[{}]", net.name(ctx.waveform.hierarchy()), idx);
-                self.write_net_stat(ctx, name, stat)?;
+            PackedStats::Vector(stats) => {
+                for (idx, stat) in stats.iter().enumerate() {
+                    let name = format!("{}[{}]", net.name(ctx.waveform.hierarchy()), idx);
+                    self.write_net_stat(ctx, name, stat)?;
+                }
             }
         }
 
@@ -146,14 +175,17 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
         }
     }
 
-    fn enter_scope(&mut self, ctx: &mut TraceVisitCtx<W>, scope: &'w Scope)
-        -> Result<(), Self::Error>
-    {
+    fn enter_scope(
+        &mut self,
+        ctx: &mut TraceVisitCtx<W>,
+        scope: &'w Scope,
+    ) -> Result<(), Self::Error> {
         self.scope_ctx.push(ScopeCtx {
-            name_escaped: scope.name(ctx.waveform.hierarchy())
+            name_escaped: scope
+                .name(ctx.waveform.hierarchy())
                 .replace('[', "\\[")
                 .replace(']', "\\]"),
-            instance_empty: true
+            instance_empty: true,
         });
 
         // TODO: Scope export should be deferred until it's determined there's at least one
@@ -162,7 +194,11 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
         // This is an overcomplicated hack that deffers it only by one level of nesting.
 
         // Begin parent's scope if it was empty
-        if let Some(ScopeCtx { ref instance_empty, name_escaped }) = self.get_parent_ctx_mut() {
+        if let Some(ScopeCtx {
+            ref instance_empty,
+            name_escaped,
+        }) = self.get_parent_ctx_mut()
+        {
             if *instance_empty {
                 let scope_str = format!("INSTANCE {}", name_escaped);
                 self.begin_scope(ctx.out, scope_str.as_str())?;
@@ -172,26 +208,33 @@ impl<'w, W> TraceVisitorAgent<'w, W> for SaifAgent<'w> where W: std::io::Write {
         Ok(())
     }
 
-    fn exit_scope(&mut self, ctx: &mut TraceVisitCtx<W>, _scope: &'w Scope)
-            -> Result<(), Self::Error> {
+    fn exit_scope(
+        &mut self,
+        ctx: &mut TraceVisitCtx<W>,
+        _scope: &'w Scope,
+    ) -> Result<(), Self::Error> {
         self.end_scope(ctx.out)
     }
 }
 
-pub fn export<W>(
-    ctx: &Context,
-    mut out: W,
-    iteration: usize
-) -> std::io::Result<()>
-    where W: std::io::Write
+pub fn export<W>(ctx: &Context, mut out: W, iteration: usize) -> std::io::Result<()>
+where
+    W: std::io::Write,
 {
     let hier = ctx.wave.hierarchy();
-    let time_end = *ctx.wave.time_table().last().expect("Waveform shouldn't be empty");
-    let timescale = hier.timescale().expect("Waveform should contain a timescale");
+    let time_end = *ctx
+        .wave
+        .time_table()
+        .last()
+        .expect("Waveform shouldn't be empty");
+    let timescale = hier
+        .timescale()
+        .expect("Waveform should contain a timescale");
 
     write!(
         out,
-        indoc!("
+        indoc!(
+            "
             (SAIFILE
               (SAIFVERSION \"2.0\")
               (DIRECTION \"backward\")
@@ -200,34 +243,30 @@ pub fn export<W>(
               (DIVIDER / )
               (TIMESCALE {}{})
               (DURATION {})
-        "),
+        "
+        ),
         clap::crate_name!(),
-        timescale.factor, DisplayTimescaleUnit(timescale.unit),
+        timescale.factor,
+        DisplayTimescaleUnit(timescale.unit),
         time_end / ctx.num_of_iterations
     )?;
 
     if !ctx.ignore_date {
-        writeln!(
-            out,
-            "  (DATE \"{}\")",
-            Utc::now().format("%a %b %-d %T %Y")
-        )?;
+        writeln!(out, "  (DATE \"{}\")", Utc::now().format("%a %b %-d %T %Y"))?;
     }
 
     if !ctx.ignore_version {
-        writeln!(
-            out,
-            "  (VERSION \"{}\")",
-            clap::crate_version!()
-        )?;
+        writeln!(out, "  (VERSION \"{}\")", clap::crate_version!())?;
     }
 
     let netlist_root = match ctx.top_scope {
-        Some(scope_ref) => hier.get(scope_ref).full_name(hier)
+        Some(scope_ref) => hier
+            .get(scope_ref)
+            .full_name(hier)
             .split('.')
             .map(String::from)
             .collect::<Vec<_>>(),
-        None => Vec::new()
+        None => Vec::new(),
     };
 
     let mut visitor_ctx = TraceVisitCtx {

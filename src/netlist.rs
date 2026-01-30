@@ -8,18 +8,18 @@ use std::collections::HashMap;
 
 #[derive(Debug, Deserialize)]
 pub struct Module {
-    pub cells: HashMap<String, Cell>
+    pub cells: HashMap<String, Cell>,
 }
 
 #[derive(Debug, Deserialize)]
 pub struct Cell {
     #[serde(rename = "type")]
-    pub type_name: String
+    pub type_name: String,
 }
 
 #[derive(Deserialize)]
 pub struct Netlist {
-    pub modules: HashMap<String, Module>
+    pub modules: HashMap<String, Module>,
 }
 
 impl Cell {
@@ -38,10 +38,15 @@ impl Module {
     pub fn get_module_of_cell<'s>(
         &self,
         netlist: &'s Netlist,
-        cell_name: &str
+        cell_name: &str,
     ) -> Result<&'s Self, ModuleLookupError> {
-        let cell = self.cells.get(cell_name).ok_or(ModuleLookupError::CellNotFound)?;
-        let module = cell.get_module(netlist).ok_or(ModuleLookupError::ModuleUndefined)?;
+        let cell = self
+            .cells
+            .get(cell_name)
+            .ok_or(ModuleLookupError::CellNotFound)?;
+        let module = cell
+            .get_module(netlist)
+            .ok_or(ModuleLookupError::ModuleUndefined)?;
         Ok(module)
     }
 }

@@ -16,6 +16,7 @@ stages:
   script:
   - source $HOME/.cargo/env
   - cargo build
+  - cargo fmt --all -- --check
   artifacts:
     paths:
     - target/debug/trace2power
@@ -23,9 +24,6 @@ stages:
 
 build_debug:
   extends: .build
-  script:
-  - source $HOME/.cargo/env
-  - cargo build
   artifacts:
     paths:
     - target/debug/trace2power

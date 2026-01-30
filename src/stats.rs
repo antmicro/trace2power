@@ -1,10 +1,10 @@
 // Copyright (c) 2024-2026 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
-use std::fmt::Debug;
 use itertools::izip;
-use wellen::{simple::Waveform, Signal, SignalValue, TimeTableIdx, SignalRef};
 use rayon::prelude::*;
+use std::fmt::Debug;
+use wellen::{Signal, SignalRef, SignalValue, TimeTableIdx, simple::Waveform};
 
 #[derive(Debug, Clone)]
 pub struct SignalStats {
@@ -33,7 +33,10 @@ impl Default for SignalStats {
 }
 
 impl SignalStats {
-    fn modify_time_stat_of_value<'s, F>(&'s mut self, val: char, f: F) where F: FnOnce(u32) -> u32 {
+    fn modify_time_stat_of_value<'s, F>(&'s mut self, val: char, f: F)
+    where
+        F: FnOnce(u32) -> u32,
+    {
         match val {
             '1' => self.high_time = f(self.high_time),
             '0' => self.low_time = f(self.low_time),
@@ -63,8 +66,10 @@ impl SignalStats {
 }
 
 fn val_at(ti: TimeTableIdx, sig: &Signal) -> SignalValue<'_> {
-    let offset = sig.get_offset(ti).expect("Signal change timestamp should be valid");
-    return sig.get_value_at(&offset, 0)
+    let offset = sig
+        .get_offset(ti)
+        .expect("Signal change timestamp should be valid");
+    return sig.get_value_at(&offset, 0);
 }
 
 fn time_value_at(wave: &Waveform, ti: TimeTableIdx) -> u64 {
@@ -77,16 +82,32 @@ pub fn calc_stats_for_each_time_span(
     glitches_only: bool,
     clk_signal: Option<SignalRef>,
     sig_ref: SignalRef,
-    num_of_iterations: u64) -> Vec<PackedStats>
-{
+    num_of_iterations: u64,
+) -> Vec<PackedStats> {
     let mut stats = Vec::with_capacity(num_of_iterations as usize);
-    let time_span = (*wave.time_table().last().expect("Waveform shouldn't be empty")) / num_of_iterations;
+    let time_span = (*wave
+        .time_table()
+        .last()
+        .expect("Waveform shouldn't be empty"))
+        / num_of_iterations;
 
-    stats.extend((0..num_of_iterations).into_par_iter().map(|index| {
-        let first_time_stamp = index * time_span;
-        let last_time_stamp = (index + 1) * time_span;
-        return calc_stats(wave, glitches_only, clk_signal, sig_ref, first_time_stamp, last_time_stamp);
-    }).collect::<Vec<PackedStats>>());
+    stats.extend(
+        (0..num_of_iterations)
+            .into_par_iter()
+            .map(|index| {
+                let first_time_stamp = index * time_span;
+                let last_time_stamp = (index + 1) * time_span;
+                return calc_stats(
+                    wave,
+                    glitches_only,
+                    clk_signal,
+                    sig_ref,
+                    first_time_stamp,
+                    last_time_stamp,
+                );
+            })
+            .collect::<Vec<PackedStats>>(),
+    );
 
     return stats;
 }
@@ -97,8 +118,8 @@ pub fn calc_stats(
     clk_signal: Option<SignalRef>,
     sig_ref: SignalRef,
     first_time_stamp: wellen::Time,
-    last_time_stamp: wellen::Time) -> PackedStats
-{
+    last_time_stamp: wellen::Time,
+) -> PackedStats {
     let sig = wave.get_signal(sig_ref).unwrap();
 
     let n = sig.time_indices().len();
@@ -106,10 +127,14 @@ pub fn calc_stats(
         return PackedStats::Vector(Vec::new());
     }
 
-    let mut prev_val = val_at(sig.get_first_time_idx().expect("Signal should have at least one value change"), sig);
-    
+    let mut prev_val = val_at(
+        sig.get_first_time_idx()
+            .expect("Signal should have at least one value change"),
+        sig,
+    );
+
     let bits = prev_val.bits();
-    
+
     // Check if bits are valid, otherwise value is a real number
     let bit_len = if let Some(bit_len) = bits {
         bit_len
@@ -123,25 +148,25 @@ pub fn calc_stats(
     for _ in 0..bit_len {
         ss.push(Default::default())
     }
-    
+
     let mut current_value_entry_index: usize = 1;
 
     // Fast forward to relevant starting time stamp
     while current_value_entry_index < sig.time_indices().len() {
         let time_idx = sig.time_indices()[current_value_entry_index];
-        
+
         if time_value_at(wave, time_idx) > first_time_stamp {
             break;
         }
-        
+
         prev_val = val_at(time_idx, sig);
-        
+
         current_value_entry_index += 1;
     }
 
     // For high time calculations to start only from specified first time stamp
     let mut prev_ts = first_time_stamp;
-    
+
     // Accumulate statistics over desired time span
     while current_value_entry_index < sig.time_indices().len() {
         let time_idx = sig.time_indices()[current_value_entry_index];
@@ -154,25 +179,33 @@ pub fn calc_stats(
         }
 
         let val_str = val.to_bit_string().expect("Signal's value should be valid");
-        let prev_val_str = prev_val.to_bit_string().expect("Signal's previous value should be valid");
+        let prev_val_str = prev_val
+            .to_bit_string()
+            .expect("Signal's previous value should be valid");
         for (c, prev_c, i) in izip!(val_str.chars(), prev_val_str.chars(), 0..) {
             match (prev_c, c) {
                 ('0', '1') | ('1', '0') => {
                     ss[i].clean_trans_count += 1;
                     ss[i].trans_count_doubled += 2;
                 }
-                (other @ _, 'x') | ('x', other @ _) => if other != 'x' {
-                    ss[i].trans_count_doubled += 1;
-                    ss[i].glitch_trans_count += 1;
-                }
-                (other @ _, 'z') | ('z', other @ _) => if other != 'z' {
-                    ss[i].trans_count_doubled += 1;
-                    if other == '0' {
-                        ss[i].clean_trans_count += 1;
+                (other @ _, 'x') | ('x', other @ _) => {
+                    if other != 'x' {
+                        ss[i].trans_count_doubled += 1;
+                        ss[i].glitch_trans_count += 1;
                     }
-                },
-                _ => if prev_c != c {
-                    panic!("Unknown transition {prev_c} -> {c}")
+                }
+                (other @ _, 'z') | ('z', other @ _) => {
+                    if other != 'z' {
+                        ss[i].trans_count_doubled += 1;
+                        if other == '0' {
+                            ss[i].clean_trans_count += 1;
+                        }
+                    }
+                }
+                _ => {
+                    if prev_c != c {
+                        panic!("Unknown transition {prev_c} -> {c}")
+                    }
                 }
             }
 
@@ -182,8 +215,15 @@ pub fn calc_stats(
         prev_val = val;
     }
 
-    for (prev_c, i) in izip!(prev_val.to_bit_string().expect("Signal's previous value should be valid").chars(), 0..) {
-        ss[i].modify_time_stat_of_value(prev_c, |v| v + (last_time_stamp - (prev_ts as u64)) as u32);
+    for (prev_c, i) in izip!(
+        prev_val
+            .to_bit_string()
+            .expect("Signal's previous value should be valid")
+            .chars(),
+        0..
+    ) {
+        ss[i]
+            .modify_time_stat_of_value(prev_c, |v| v + (last_time_stamp - (prev_ts as u64)) as u32);
     }
 
     if glitches_only {
@@ -198,13 +238,17 @@ pub fn calc_stats(
     ss.reverse();
 
     return if ss.len() == 1 {
-        PackedStats::OneBit(ss.into_iter().next().expect("Signal's value should be valid"))
+        PackedStats::OneBit(
+            ss.into_iter()
+                .next()
+                .expect("Signal's value should be valid"),
+        )
     } else {
         PackedStats::Vector(ss)
-    }
+    };
 }
 
 pub enum PackedStats {
     OneBit(SignalStats),
-    Vector(Vec<SignalStats>)
+    Vector(Vec<SignalStats>),
 }

@@ -10,7 +10,7 @@ where
     HIter: Iterator<Item = VarRef> + 'w,
     SIter: Iterator<Item = ScopeRef> + 'w,
     F: Fn(&'w Scope) -> HIter,
-    S: Fn(&'w Scope) -> SIter
+    S: Fn(&'w Scope) -> SIter,
 {
     hierarchy: &'w Hierarchy,
     get_iter_of_scope: F,
@@ -25,7 +25,7 @@ where
     HIter: Iterator<Item = VarRef> + 'w,
     SIter: Iterator<Item = ScopeRef> + 'w,
     F: Fn(&'w Scope) -> HIter,
-    S: Fn(&'w Scope) -> SIter
+    S: Fn(&'w Scope) -> SIter,
 {
     type Item = VarRef;
     fn next(&mut self) -> Option<Self::Item> {
@@ -35,7 +35,8 @@ where
                 if let Some(scope) = self.scopes.pop() {
                     self.iter = (self.get_iter_of_scope)(scope);
                     self.siter = (self.get_siter_of_scope)(scope);
-                    self.scopes.extend(self.siter.by_ref().map(|s| self.hierarchy.get(s)));
+                    self.scopes
+                        .extend(self.siter.by_ref().map(|s| self.hierarchy.get(s)));
                     self.next()
                 } else {
                     None
@@ -61,4 +62,3 @@ impl VarRefsIter for Hierarchy {
         }
     }
 }
-
