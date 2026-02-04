@@ -4,10 +4,10 @@
 use std::io::Read;
 use tempfile::NamedTempFile;
 
+use libtrace2power::Args;
+use libtrace2power::OutputFormat;
+use libtrace2power::process;
 use std::path::PathBuf;
-use trace2power::Args;
-use trace2power::OutputFormat;
-use trace2power::process;
 
 fn common_args(output_file: &NamedTempFile) -> Args {
     Args {

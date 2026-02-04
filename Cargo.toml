@@ -8,7 +8,7 @@ repository = "https://github.com/antmicro/trace2power"
 exclude = [".ci.yml", ".github"]
 
 [lib]
-name = "trace2power"
+name = "libtrace2power"
 test = true
 
 [dependencies]
