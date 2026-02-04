@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2026 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeSet;
 use std::str::FromStr;
 use std::{collections::HashMap, io};
 use std::{fs, hash, path};
@@ -44,6 +45,10 @@ pub struct Args {
     /// Scope in which signals should be looked for. By default it's the global hierarchy scope.
     #[arg(long, short)]
     pub limit_scope: Option<String>,
+    /// Scope in which power will be calculated. By default it's equal to `limit_scope`.
+    /// Must be a subset of `limit_scope`.
+    #[arg(long)]
+    pub limit_scope_power: Option<String>,
     /// Yosys JSON netlist of DUT. Can be used to identify ports of primitives when exporting data.
     /// Allows skipping unnecessary or unwanted signals
     #[arg(short, long)]
@@ -159,6 +164,7 @@ struct Context {
     ignore_date: bool,
     ignore_version: bool,
     export_empty: bool,
+    power_scope_prefix: String,
 }
 
 impl Context {
@@ -222,6 +228,32 @@ impl Context {
                 .unzip(),
         };
 
+        // FIXME print only on debug
+        wave_hierarchy
+            .var_refs_iter()
+            .map(|var_ref| {
+                let var = wave_hierarchy.get(var_ref);
+                indexed_name(var.full_name(wave_hierarchy.into()), var)
+            })
+            .for_each(|v| println!("SIG: {}", v));
+
+        let all_signals_power: BTreeSet<_> = match &args.limit_scope_power {
+            None => wave_hierarchy
+                .var_refs_iter()
+                .map(|var_ref| wave_hierarchy.get(var_ref))
+                .map(|var| indexed_name(var.full_name(wave_hierarchy.into()), var))
+                .collect::<BTreeSet<_>>(),
+            Some(scope_str) => wave_hierarchy
+                .var_refs_iter()
+                .map(|var_ref| wave_hierarchy.get(var_ref))
+                .filter(|var| {
+                    let fname = indexed_name(var.full_name(wave_hierarchy.into()), var);
+                    fname.starts_with(scope_str)
+                })
+                .map(|var| indexed_name(var.full_name(wave_hierarchy.into()), var))
+                .collect::<BTreeSet<_>>(),
+        };
+
         let clk_signal: Option<SignalRef> = match &args.clock_name {
             None => None,
             Some(clock_name) => {
@@ -239,6 +271,7 @@ impl Context {
             }
         };
 
+        // TODO load signals that are under a power scope
         wave.load_signals_multi_threaded(&all_signals);
 
         let last_time_stamp = *wave
@@ -259,15 +292,27 @@ impl Context {
             .par_iter()
             .zip(all_signals)
             .map(|(var_ref, sig_ref)| {
+                let fname = indexed_name(
+                    wave.hierarchy()
+                        .get(*var_ref)
+                        .full_name(wave.hierarchy().into()),
+                    wave.hierarchy().get(*var_ref),
+                );
+                if args.limit_scope_power.is_none() || all_signals_power.contains(&fname) {
+                    return (
+                        HashVarRef(*var_ref),
+                        stats::calc_stats_for_each_time_span(
+                            &wave,
+                            args.only_glitches,
+                            clk_signal,
+                            sig_ref,
+                            num_of_iterations,
+                        ),
+                    );
+                }
                 (
                     HashVarRef(*var_ref),
-                    stats::calc_stats_for_each_time_span(
-                        &wave,
-                        args.only_glitches,
-                        clk_signal,
-                        sig_ref,
-                        num_of_iterations,
-                    ),
+                    vec![stats::empty_stats(&wave, sig_ref); num_of_iterations as usize],
                 )
             })
             .collect();
@@ -298,6 +343,10 @@ impl Context {
             ignore_date: args.ignore_date,
             ignore_version: args.ignore_version,
             export_empty: args.export_empty,
+            power_scope_prefix: args
+                .limit_scope_power
+                .clone()
+                .unwrap_or_else(|| lookup_scope_name_prefix),
         }
     }
 }

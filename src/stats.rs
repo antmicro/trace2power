@@ -248,6 +248,42 @@ pub fn calc_stats(
     };
 }
 
+pub fn empty_stats(wave: &Waveform, sig_ref: SignalRef) -> PackedStats {
+    let sig = wave.get_signal(sig_ref).unwrap();
+
+    if sig.time_indices().len() == 0 {
+        return PackedStats::Vector(Vec::new());
+    }
+
+    let bits = val_at(
+        sig.get_first_time_idx()
+            .expect("Signal should have at least one value change"),
+        sig,
+    )
+    .bits();
+
+    // Check if bits are valid, otherwise value is a real number
+    let bit_len: usize = if let Some(bit_len) = bits {
+        bit_len as usize
+    } else {
+        // TODO: add function handling real numbers
+        return PackedStats::Vector(Vec::new());
+    };
+
+    let ss = vec![Default::default(); bit_len];
+
+    return if ss.len() == 1 {
+        PackedStats::OneBit(
+            ss.into_iter()
+                .next()
+                .expect("Signal's value should be valid"),
+        )
+    } else {
+        PackedStats::Vector(ss)
+    };
+}
+
+#[derive(Clone)]
 pub enum PackedStats {
     OneBit(SignalStats),
     Vector(Vec<SignalStats>),

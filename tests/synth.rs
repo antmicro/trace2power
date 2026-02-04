@@ -27,6 +27,7 @@ fn common_args(output_file: &NamedTempFile) -> Args {
         per_clock_cycle: false,
         only_glitches: false,
         export_empty: false,
+        limit_scope_power: None,
     }
 }
 

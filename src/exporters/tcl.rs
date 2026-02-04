@@ -10,7 +10,7 @@ use crate::{HashVarRef, LookupPoint};
 use super::{TraceVisit, TraceVisitCtx, TraceVisitorAgent};
 
 /// Minimal stats, used for Tcl export, hashable to allow grouping
-#[derive(Hash, Eq, PartialEq)]
+#[derive(Hash, Eq, PartialEq, Default)]
 struct TclStat {
     high_time: u32,
     trans_count_doubled: u32,
@@ -54,8 +54,10 @@ where
         ctx: &mut TraceVisitCtx<W>,
         var_ref: VarRef,
     ) -> Result<(), Self::Error> {
-        let net = ctx.waveform.hierarchy().get(var_ref);
-        let scope_str = self.scope.join(".");
+        let hier = ctx.waveform.hierarchy();
+        let net = hier.get(var_ref);
+        let scope_str = self.scope.join("/");
+        let zero = !net.full_name(hier).contains(ctx.power_scope);
 
         let stats = &self.stats[&HashVarRef(var_ref)];
 
@@ -64,14 +66,22 @@ where
         match &stats[self.span_index] {
             PackedStats::OneBit(stat) => {
                 self.grouped_stats
-                    .entry(TclStat::from(stat))
+                    .entry(if zero {
+                        Default::default()
+                    } else {
+                        TclStat::from(stat)
+                    })
                     .or_insert_with(|| vec![])
                     .push(fname);
             }
             PackedStats::Vector(stats) => {
                 for (idx, stat) in stats.iter().enumerate() {
                     self.grouped_stats
-                        .entry(TclStat::from(stat))
+                        .entry(if zero {
+                            Default::default()
+                        } else {
+                            TclStat::from(stat)
+                        })
                         .or_insert_with(|| vec![])
                         .push(format!("{}[{}]", fname, idx));
                 }
@@ -130,6 +140,7 @@ where
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
         remove_virtual_pins: ctx.remove_virtual_pins,
+        power_scope: &ctx.power_scope_prefix,
     };
 
     let mut agent = TclAgent::new(&ctx.stats, iteration);
@@ -175,6 +186,21 @@ where
         writeln!(
             out,
             "  set_power_activity -pins \"{}\" -activity {} -duty {}",
+            itertools::Itertools::intersperse(
+                pins.clone()
+                    .into_iter()
+                    .map(|n| n[ctx.scope_prefix_length..]
+                        .replace('\\', "")
+                        .replace('$', "\\$")),
+                " ".into()
+            )
+            .collect::<String>(),
+            activity,
+            duty
+        )?;
+        writeln!(
+            out,
+            "  set_power_activity -input_ports \"{}\" -activity {} -duty {}",
             itertools::Itertools::intersperse(
                 pins.into_iter().map(|n| n[ctx.scope_prefix_length..]
                     .replace('\\', "")

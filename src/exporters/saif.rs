@@ -141,7 +141,9 @@ where
         ctx: &mut TraceVisitCtx<W>,
         var_ref: VarRef,
     ) -> Result<(), Self::Error> {
-        let net = ctx.waveform.hierarchy().get(var_ref);
+        let hier = ctx.waveform.hierarchy();
+        let net = hier.get(var_ref);
+        let zero = !net.full_name(hier).contains(ctx.power_scope);
 
         if self.get_ctx().instance_empty {
             let scope_str = format!("INSTANCE {}", self.get_ctx().name_escaped);
@@ -154,12 +156,22 @@ where
         match my_stats {
             PackedStats::OneBit(stat) => {
                 let name = indexed_name(net.name(ctx.waveform.hierarchy()).into(), net);
-                self.write_net_stat(ctx, name, stat)?;
+                if zero {
+                    let stat = SignalStats::default();
+                    self.write_net_stat(ctx, name, &stat)?;
+                } else {
+                    self.write_net_stat(ctx, name, stat)?;
+                }
             }
             PackedStats::Vector(stats) => {
                 for (idx, stat) in stats.iter().enumerate() {
                     let name = format!("{}[{}]", net.name(ctx.waveform.hierarchy()), idx);
-                    self.write_net_stat(ctx, name, stat)?;
+                    if zero {
+                        let stat = SignalStats::default();
+                        self.write_net_stat(ctx, name, &stat)?;
+                    } else {
+                        self.write_net_stat(ctx, name, stat)?;
+                    }
                 }
             }
         }
@@ -278,6 +290,7 @@ where
         netlist_prefix: Vec::new(),
         blackboxes_only: ctx.blackboxes_only,
         remove_virtual_pins: ctx.remove_virtual_pins,
+        power_scope: &ctx.power_scope_prefix,
     };
 
     let mut agent = SaifAgent::new(&ctx.stats, iteration, 1);

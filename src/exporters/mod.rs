@@ -31,6 +31,7 @@ where
     netlist_prefix: Vec<String>,
     blackboxes_only: bool,
     remove_virtual_pins: bool,
+    power_scope: &'w String,
 }
 
 /// Traverses a hierarchy of scopes and variables loaded from a trace. For a given scope nets are
