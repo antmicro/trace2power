@@ -198,19 +198,21 @@ where
             activity,
             duty
         )?;
-        writeln!(
-            out,
-            "  set_power_activity -input_ports \"{}\" -activity {} -duty {}",
-            itertools::Itertools::intersperse(
-                pins.into_iter().map(|n| n[ctx.scope_prefix_length..]
-                    .replace('\\', "")
-                    .replace('$', "\\$")),
-                " ".into()
-            )
-            .collect::<String>(),
-            activity,
-            duty
-        )?;
+        if ctx.input_ports_activity {
+            writeln!(
+                out,
+                "  set_power_activity -input_ports \"{}\" -activity {} -duty {}",
+                itertools::Itertools::intersperse(
+                    pins.into_iter().map(|n| n[ctx.scope_prefix_length..]
+                        .replace('\\', "")
+                        .replace('$', "\\$")),
+                    " ".into()
+                )
+                .collect::<String>(),
+                activity,
+                duty
+            )?;
+        }
     }
     writeln!(out, "}}")?;
 

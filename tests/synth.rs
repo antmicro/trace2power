@@ -28,6 +28,7 @@ fn common_args(output_file: &NamedTempFile) -> Args {
         only_glitches: false,
         export_empty: false,
         limit_scope_power: None,
+        input_ports_activity: false,
     }
 }
 

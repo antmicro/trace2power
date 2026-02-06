@@ -85,6 +85,9 @@ pub struct Args {
     /// Export without accumulation
     #[arg(long)]
     pub export_empty: bool,
+    /// Set activity for input ports in TCL mode
+    #[arg(long)]
+    pub input_ports_activity: bool,
 }
 
 impl Args {
@@ -165,6 +168,7 @@ struct Context {
     ignore_version: bool,
     export_empty: bool,
     power_scope_prefix: String,
+    input_ports_activity: bool,
 }
 
 impl Context {
@@ -227,15 +231,6 @@ impl Context {
                 .map(|(var_ref, var)| (var_ref, var.signal_ref()))
                 .unzip(),
         };
-
-        // FIXME print only on debug
-        wave_hierarchy
-            .var_refs_iter()
-            .map(|var_ref| {
-                let var = wave_hierarchy.get(var_ref);
-                indexed_name(var.full_name(wave_hierarchy.into()), var)
-            })
-            .for_each(|v| println!("SIG: {}", v));
 
         let all_signals_power: BTreeSet<_> = match &args.limit_scope_power {
             None => wave_hierarchy
@@ -347,6 +342,7 @@ impl Context {
                 .limit_scope_power
                 .clone()
                 .unwrap_or_else(|| lookup_scope_name_prefix),
+            input_ports_activity: args.input_ports_activity,
         }
     }
 }
