@@ -641,7 +641,7 @@ dependencies = [
 
 [[package]]
 name = "trace2power"
-version = "0.4.2"
+version = "0.4.3"
 dependencies = [
  "chrono",
  "clap",
