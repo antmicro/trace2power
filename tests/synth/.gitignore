@@ -3,3 +3,5 @@
 !Makefile
 !synth.saif
 !synth.tcl
+!counter.vcd
+!counter.json

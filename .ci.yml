@@ -56,9 +56,10 @@ test_debug:
   script:
   - export EXAMPLES_DIRECTORY=$(pwd)/examples
   - export PATH=$PATH:$(pwd)/target/debug
-  - make -C tests
   - source $HOME/.cargo/env
+  # Test without first running Make tests
   - cargo test
+  - make -C tests
   dependencies: [build_debug]
 
 test_release:
@@ -66,7 +67,7 @@ test_release:
   script:
   - export EXAMPLES_DIRECTORY=$(pwd)/examples
   - export PATH=$PATH:$(pwd)/target/release
-  - make -C tests
   - source $HOME/.cargo/env
+  - make -C tests
   - cargo test --release
   dependencies: [build_release]

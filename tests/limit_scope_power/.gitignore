@@ -1,2 +1,3 @@
-out*
-hierarchical_tb
+*
+!limit_scope_power.tcl
+!hierarchical.vcd
