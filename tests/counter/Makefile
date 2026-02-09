@@ -14,5 +14,5 @@ all: counter
 counter:
 	cp $(EXAMPLE_FILES) .
 	$(EXAMPLE_SCRIPT)
-	sort -bd $(TCL_OUTPUT_FILE) | diff - $(TCL_GOLDEN_FILE)
+	diff $(TCL_OUTPUT_FILE) $(TCL_GOLDEN_FILE)
 	diff $(SAIF_OUTPUT_FILE) $(SAIF_GOLDEN_FILE)

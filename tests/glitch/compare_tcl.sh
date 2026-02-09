@@ -4,6 +4,6 @@
 
 for f in $(ls $1); do
     if [ -f "$2/$f" ]; then
-        diff <(sort "$1/$f") <(sort "$2/$f")
+        diff "$1/$f" "$2/$f"
     fi
 done

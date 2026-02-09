@@ -1,4 +1,4 @@
 proc set_pin_activity_and_duty {} {
-  set_power_activity -pins "out glitch0/out" -activity 2 -duty 0.8
   set_power_activity -pins "a b c clk i[0] i[1] i[2] i[3] glitch0/a glitch0/b glitch0/c glitch0/x glitch0/y glitch0/z" -activity 0 -duty 0
+  set_power_activity -pins "out glitch0/out" -activity 2 -duty 0.8
 }

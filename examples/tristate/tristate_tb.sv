@@ -4,7 +4,8 @@
 `timescale 1ns/1ns
 
 module tristate_tb();
-  logic clk, dir, ctrl, out, z_state;
+  logic clk, dir, ctrl, out;
+  wire z_state;
 
   tristate tristate0(
     .clk(clk),

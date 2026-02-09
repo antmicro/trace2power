@@ -44,22 +44,5 @@ fn test_limit_scope_power_tcl() {
     output_file
         .read_to_string(&mut actual)
         .expect("Actual file should exist");
-    assert_eq!(sort_tcl(actual), sort_tcl(String::from(golden)));
-}
-
-// TODO remove once grouped_stats would be iterated in a deterministic way
-fn sort_tcl(input: String) -> String {
-    let mut lines: Vec<&str> = input.lines().collect();
-
-    fn key(s: &str) -> Vec<u8> {
-        s.bytes()
-            // ignore leading blanks
-            .skip_while(|&c| c == b' ' || c == b'\t')
-            // dictionary order
-            .filter(|&c| c.is_ascii_alphanumeric() || c == b' ' || c == b'\t')
-            .collect()
-    }
-
-    lines.sort_by(|a, b| key(a).cmp(&key(b)));
-    lines.join("\n")
+    assert_eq!(actual, String::from(golden));
 }

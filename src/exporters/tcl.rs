@@ -1,6 +1,7 @@
 // Copyright (c) 2024-2026 Antmicro <www.antmicro.com>
 // SPDX-License-Identifier: Apache-2.0
 
+use std::collections::BTreeMap;
 use std::{collections::HashMap, hash::Hash};
 use wellen::{GetItem, VarRef};
 
@@ -10,7 +11,7 @@ use crate::{HashVarRef, LookupPoint};
 use super::{TraceVisit, TraceVisitCtx, TraceVisitorAgent};
 
 /// Minimal stats, used for Tcl export, hashable to allow grouping
-#[derive(Hash, Eq, PartialEq, Default)]
+#[derive(Hash, Eq, Default, PartialEq, PartialOrd, Ord)]
 struct TclStat {
     high_time: u32,
     trans_count_doubled: u32,
@@ -28,7 +29,7 @@ impl From<&SignalStats> for TclStat {
 struct TclAgent<'a> {
     stats: &'a HashMap<HashVarRef, Vec<PackedStats>>,
     span_index: usize,
-    grouped_stats: HashMap<TclStat, Vec<String>>,
+    grouped_stats: BTreeMap<TclStat, Vec<String>>,
     scope: Vec<String>,
 }
 
@@ -37,7 +38,7 @@ impl<'a> TclAgent<'a> {
         Self {
             stats,
             span_index,
-            grouped_stats: HashMap::new(),
+            grouped_stats: BTreeMap::new(),
             scope: Vec::new(),
         }
     }
@@ -170,7 +171,6 @@ where
         );
 
     writeln!(out, "proc set_pin_activity_and_duty {{}} {{")?;
-    // TODO iterate over grouped_stats in deterministic order
     for (stats, pins) in agent.grouped_stats {
         let (duty, activity) = if ctx.export_empty {
             (0.0, 0.0)

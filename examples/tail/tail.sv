@@ -4,7 +4,8 @@
 `timescale 1ns/1ns
 
 module tail();
-  logic a, b, c, d, o;
+  logic a, b, c, d;
+  wire o;
 
   big_and dut(a, b, c, d, o);
 

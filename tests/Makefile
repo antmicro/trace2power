@@ -4,7 +4,6 @@
 all:
 	$(MAKE) -C counter
 	$(MAKE) -C glitch
-	$(MAKE) -C hierarchical
 	$(MAKE) -C peak_power
 	$(MAKE) -C synth
 	$(MAKE) -C tail

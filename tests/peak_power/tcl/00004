@@ -1,6 +1,6 @@
 proc set_pin_activity_and_duty {} {
-  set_power_activity -pins "counter0/clk" -activity 2 -duty 0.5
   set_power_activity -pins "counter0/cnt[1] counter0/cnt[3] counter0/cnt[4] counter0/pulse16 counter0/pulse4 counter0/pulse8" -activity 0 -duty 0
   set_power_activity -pins "counter0/cnt[0] counter0/pulse2" -activity 1 -duty 0.5
+  set_power_activity -pins "counter0/clk" -activity 2 -duty 0.5
   set_power_activity -pins "counter0/cnt[2]" -activity 0 -duty 1
 }
