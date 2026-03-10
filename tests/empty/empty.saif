@@ -1,0 +1,9 @@
+(SAIFILE
+  (SAIFVERSION "2.0")
+  (DIRECTION "backward")
+  (DESIGN )
+  (PROGRAM_NAME "trace2power")
+  (DIVIDER / )
+  (TIMESCALE 1ns)
+  (DURATION 0)
+)

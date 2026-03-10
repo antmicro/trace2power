@@ -13,7 +13,7 @@ where
     hierarchy: &'w Hierarchy,
     get_iter_of_scope: F,
     scopes: Vec<&'w Scope>,
-    iter: HIter,
+    iter: Option<HIter>,
 }
 
 impl<'w, HIter, F> Iterator for VarRefIterator<'w, HIter, F>
@@ -23,19 +23,22 @@ where
 {
     type Item = VarRef;
     fn next(&mut self) -> Option<Self::Item> {
-        match self.iter.next() {
-            Some(v) => Some(v),
-            None => {
-                if let Some(scope) = self.scopes.pop() {
-                    self.iter = (self.get_iter_of_scope)(scope);
-                    let mut siter = scope.scopes(self.hierarchy);
-                    self.scopes
-                        .extend(siter.by_ref().map(|s| &self.hierarchy[s]));
-                    self.next()
-                } else {
-                    None
+        match self.iter {
+            Some(ref mut it) => match it.next() {
+                Some(v) => Some(v),
+                None => {
+                    if let Some(scope) = self.scopes.pop() {
+                        self.iter = Some((self.get_iter_of_scope)(scope));
+                        let mut siter = scope.scopes(self.hierarchy);
+                        self.scopes
+                            .extend(siter.by_ref().map(|s| &self.hierarchy[s]));
+                        self.next()
+                    } else {
+                        None
+                    }
                 }
-            }
+            },
+            None => None,
         }
     }
 }
@@ -50,7 +53,10 @@ impl VarRefsIter for Hierarchy {
             hierarchy: &self,
             scopes: self.scopes().map(|s| &self[s]).collect(),
             get_iter_of_scope: |s: &Scope| s.vars(self),
-            iter: self.first_scope().expect("Top scope not found").vars(self),
+            iter: match self.first_scope() {
+                Some(s) => Some(s.vars(self)),
+                None => None,
+            },
         }
     }
 }
