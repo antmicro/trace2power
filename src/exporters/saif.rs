@@ -6,7 +6,7 @@ use crate::{Context, indexed_name};
 use chrono::Utc;
 use indoc::indoc;
 use std::collections::HashMap;
-use wellen::{GetItem, Scope, TimescaleUnit, VarRef};
+use wellen::{Scope, TimescaleUnit, VarRef};
 
 use super::{TraceVisit, TraceVisitCtx, TraceVisitorAgent};
 use crate::HashVarRef;
@@ -17,6 +17,8 @@ impl std::fmt::Display for DisplayTimescaleUnit {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         use TimescaleUnit::*;
         let s = match self.0 {
+            ZeptoSeconds => "zs",
+            AttoSeconds => "as",
             FemtoSeconds => "fs",
             PicoSeconds => "ps",
             NanoSeconds => "ns",
@@ -142,7 +144,7 @@ where
         var_ref: VarRef,
     ) -> Result<(), Self::Error> {
         let hier = ctx.waveform.hierarchy();
-        let net = hier.get(var_ref);
+        let net = &hier[var_ref];
         let zero = !net.full_name(hier).contains(ctx.power_scope);
 
         if self.get_ctx().instance_empty {
@@ -272,8 +274,7 @@ where
     }
 
     let netlist_root = match ctx.top_scope {
-        Some(scope_ref) => hier
-            .get(scope_ref)
+        Some(scope_ref) => hier[scope_ref]
             .full_name(hier)
             .split('.')
             .map(String::from)

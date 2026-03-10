@@ -9,7 +9,7 @@ use std::{fs, hash, path};
 use clap::Parser;
 use rayon::prelude::*;
 use stats::PackedStats;
-use wellen::{self, GetItem, Hierarchy, ScopeRef, SignalRef, Var, VarRef, simple::Waveform};
+use wellen::{self, Hierarchy, ScopeRef, SignalRef, Var, VarRef, simple::Waveform};
 
 mod exporters;
 pub mod netlist;
@@ -211,7 +211,7 @@ impl Context {
         let lookup_scope_name_prefix = match lookup_point {
             LookupPoint::Top => "".to_string(),
             LookupPoint::Scope(scope_ref) => {
-                let scope = wave_hierarchy.get(scope_ref);
+                let scope = &wave_hierarchy[scope_ref];
                 scope.full_name(wave_hierarchy).to_string() + "."
             }
         };
@@ -219,11 +219,11 @@ impl Context {
         let (all_vars, all_signals): (Vec<_>, Vec<_>) = match lookup_point {
             LookupPoint::Top => wave_hierarchy
                 .var_refs_iter()
-                .map(|var_ref| (var_ref, wave_hierarchy.get(var_ref).signal_ref()))
+                .map(|var_ref| (var_ref, wave_hierarchy[var_ref].signal_ref()))
                 .unzip(),
             LookupPoint::Scope(_) => wave_hierarchy
                 .var_refs_iter()
-                .map(|var_ref| (var_ref, wave_hierarchy.get(var_ref)))
+                .map(|var_ref| (var_ref, &wave_hierarchy[var_ref]))
                 .filter(|(_, var)| {
                     let fname = indexed_name(var.full_name(wave_hierarchy.into()), var);
                     fname.starts_with(&lookup_scope_name_prefix)
@@ -235,17 +235,17 @@ impl Context {
         let all_signals_power: BTreeSet<_> = match &args.limit_scope_power {
             None => wave_hierarchy
                 .var_refs_iter()
-                .map(|var_ref| wave_hierarchy.get(var_ref))
+                .map(|var_ref| &wave_hierarchy[var_ref])
                 .map(|var| indexed_name(var.full_name(wave_hierarchy.into()), var))
                 .collect::<BTreeSet<_>>(),
             Some(scope_str) => wave_hierarchy
                 .var_refs_iter()
-                .map(|var_ref| wave_hierarchy.get(var_ref))
+                .map(|var_ref| &wave_hierarchy[var_ref])
                 .filter(|var| {
                     let fname = indexed_name(var.full_name(wave_hierarchy.into()), var);
                     fname.starts_with(scope_str)
                 })
-                .map(|var| indexed_name(var.full_name(wave_hierarchy.into()), var))
+                .map(|var| indexed_name(var.full_name(wave_hierarchy.into()), &var))
                 .collect::<BTreeSet<_>>(),
         };
 
@@ -255,7 +255,7 @@ impl Context {
                 let mut found: Option<SignalRef> = None;
 
                 for var_ref in wave_hierarchy.var_refs_iter() {
-                    let net = wave_hierarchy.get(var_ref);
+                    let net = &wave_hierarchy[var_ref];
                     let sig_ref = net.signal_ref();
                     if net.name(wave_hierarchy) == clock_name {
                         found = Some(sig_ref)
@@ -288,10 +288,8 @@ impl Context {
             .zip(all_signals)
             .map(|(var_ref, sig_ref)| {
                 let fname = indexed_name(
-                    wave.hierarchy()
-                        .get(*var_ref)
-                        .full_name(wave.hierarchy().into()),
-                    wave.hierarchy().get(*var_ref),
+                    wave.hierarchy()[*var_ref].full_name(wave.hierarchy().into()),
+                    &wave.hierarchy()[*var_ref],
                 );
                 if args.limit_scope_power.is_none() || all_signals_power.contains(&fname) {
                     return (

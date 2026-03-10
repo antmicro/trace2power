@@ -8,7 +8,7 @@ use crate::LookupPoint;
 use crate::netlist::{Module, ModuleLookupError, Netlist};
 use std::io::Write;
 use wellen::simple::Waveform;
-use wellen::{GetItem, Scope, VarRef};
+use wellen::{Scope, VarRef};
 
 #[derive(Debug, Copy, Clone)]
 enum ModuleRef<'n> {
@@ -166,7 +166,7 @@ where
             for var_ref in scope.vars(hier) {
                 if let ModuleRef::BlackBox = module {
                     if ctx.remove_virtual_pins {
-                        let var = hier.get(var_ref);
+                        let var = &hier[var_ref];
                         if let "VGND" | "VNB" | "VPB" | "VPWR" = var.name(hier) {
                             continue;
                         }
@@ -179,7 +179,7 @@ where
         if let ModuleRef::BlackBox = module { /* Do not descend blackboxes */
         } else {
             for scope_ref in scope.scopes(hier) {
-                let scope = hier.get(scope_ref);
+                let scope = &hier[scope_ref];
                 self.visit_scope(ctx, scope, module)?;
             }
         }
@@ -196,7 +196,7 @@ where
         match lookup_point {
             LookupPoint::Top => {
                 for scope_ref in ctx.waveform.hierarchy().scopes() {
-                    let scope = ctx.waveform.hierarchy().get(scope_ref);
+                    let scope = &ctx.waveform.hierarchy()[scope_ref];
                     self.visit_scope(ctx, scope, ModuleRef::OutsideNetlist)?;
                 }
             }
@@ -205,7 +205,7 @@ where
                 // TODO: Simplify this logic
 
                 let hier = ctx.waveform.hierarchy();
-                let scope = hier.get(scope_ref);
+                let scope = &hier[scope_ref];
                 let mut full_path: Vec<_> = scope
                     .full_name(hier)
                     .split('.')
@@ -216,7 +216,7 @@ where
                     .waveform
                     .hierarchy()
                     .scopes()
-                    .map(|scope_ref| hier.get(scope_ref))
+                    .map(|scope_ref| &hier[scope_ref])
                     .find(|scope| scope.name(hier) == full_path[0])
                     .expect("Child scope should be valid");
 
@@ -228,7 +228,7 @@ where
                     for scope_name in &full_path[1..] {
                         child_scope = child_scope
                             .scopes(hier)
-                            .map(|scope_ref| hier.get(scope_ref))
+                            .map(|scope_ref| &hier[scope_ref])
                             .find(|scope| scope.name(hier) == scope_name)
                             .expect("Child scope should be valid");
                         module_ref = get_child_module_reference(ctx, child_scope, module_ref);

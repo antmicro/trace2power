@@ -3,7 +3,7 @@
 
 use std::collections::BTreeMap;
 use std::{collections::HashMap, hash::Hash};
-use wellen::{GetItem, VarRef};
+use wellen::VarRef;
 
 use crate::stats::{PackedStats, SignalStats};
 use crate::{HashVarRef, LookupPoint};
@@ -56,7 +56,7 @@ where
         var_ref: VarRef,
     ) -> Result<(), Self::Error> {
         let hier = ctx.waveform.hierarchy();
-        let net = hier.get(var_ref);
+        let net = &hier[var_ref];
         let scope_str = self.scope.join("/");
         let zero = !net.full_name(hier).contains(ctx.power_scope);
 
@@ -123,8 +123,7 @@ where
         .expect("Waveform shouldn't be empty");
 
     let netlist_root = match ctx.top_scope {
-        Some(scope_ref) => hier
-            .get(scope_ref)
+        Some(scope_ref) => hier[scope_ref]
             .full_name(hier)
             .split('.')
             .map(String::from)
@@ -146,11 +145,7 @@ where
 
     let mut agent = TclAgent::new(&ctx.stats, iteration);
     if let LookupPoint::Scope(scope_ref) = ctx.lookup_point {
-        let scope_name = ctx
-            .wave
-            .hierarchy()
-            .get(scope_ref)
-            .full_name(ctx.wave.hierarchy());
+        let scope_name = ctx.wave.hierarchy()[scope_ref].full_name(ctx.wave.hierarchy());
         let mut scope: Vec<_> = scope_name.split('.').map(ToString::to_string).collect();
         scope.pop();
         agent.scope = scope;
