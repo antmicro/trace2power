@@ -3,7 +3,7 @@
 
 all:
 	$(MAKE) -C counter
-	$(MAKE) -C glitch
+	$(MAKE) -C glitch_power
 	$(MAKE) -C hierarchical
 	$(MAKE) -C peak_power
 	$(MAKE) -C synth

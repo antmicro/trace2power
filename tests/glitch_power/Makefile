@@ -1,8 +1,8 @@
 # Copyright (c) 2025-2026 Antmicro <www.antmicro.com>
 # SPDX-License-Identifier: Apache-2.0
 
-EXAMPLE_FILES = $(EXAMPLES_DIRECTORY)/glitch/*
-EXAMPLE_SCRIPT = ./glitch.sh
+EXAMPLE_FILES = $(EXAMPLES_DIRECTORY)/glitch_power/*
+EXAMPLE_SCRIPT = ./glitch_power.sh
 
 TCL_CHECK_SCRIPT = ./compare_tcl.sh
 TCL_OUTPUT_FILES = out_tcl
@@ -11,10 +11,10 @@ TCL_GOLDEN_FILES = tcl
 SAIF_OUTPUT_FILES = out_saif
 SAIF_GOLDEN_FILES = saif
 
-all: glitch
+all: glitch_power
 
-.PHONY: glitch
-glitch:
+.PHONY: glitch_power
+glitch_power:
 	cp $(EXAMPLE_FILES) .
 	$(EXAMPLE_SCRIPT)
 	$(TCL_CHECK_SCRIPT) $(TCL_OUTPUT_FILES) $(TCL_GOLDEN_FILES)
