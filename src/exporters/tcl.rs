@@ -6,7 +6,7 @@ use std::{collections::HashMap, hash::Hash};
 use wellen::VarRef;
 
 use crate::stats::{PackedStats, SignalStats};
-use crate::{HashVarRef, LookupPoint};
+use crate::{HashVarRef, LookupPoint, indexed_name};
 
 use super::{TraceVisit, TraceVisitCtx, TraceVisitorAgent};
 
@@ -73,7 +73,7 @@ where
                         TclStat::from(stat)
                     })
                     .or_insert_with(|| vec![])
-                    .push(fname);
+                    .push(indexed_name(fname, net));
             }
             PackedStats::Vector(stats) => {
                 for (idx, stat) in stats.iter().enumerate() {
