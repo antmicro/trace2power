@@ -6,7 +6,7 @@ use std::{collections::HashMap, hash::Hash};
 use wellen::VarRef;
 
 use crate::stats::{PackedStats, SignalStats};
-use crate::{HashVarRef, LookupPoint, indexed_name};
+use crate::{HashVarRef, LookupPoint, StatsMap, indexed_name};
 
 use super::{TraceVisit, TraceVisitCtx, TraceVisitorAgent};
 
@@ -111,7 +111,12 @@ where
     }
 }
 
-pub fn export<W>(ctx: &crate::Context, mut out: W, iteration: usize) -> std::io::Result<()>
+pub fn export<W>(
+    ctx: &crate::Context,
+    stats: &StatsMap,
+    mut out: W,
+    iteration: usize,
+) -> std::io::Result<()>
 where
     W: std::io::Write,
 {
@@ -143,7 +148,7 @@ where
         power_scope: &ctx.power_scope_prefix,
     };
 
-    let mut agent = TclAgent::new(&ctx.stats, iteration);
+    let mut agent = TclAgent::new(stats, iteration);
     if let LookupPoint::Scope(scope_ref) = ctx.lookup_point {
         let scope_name = ctx.wave.hierarchy()[scope_ref].full_name(ctx.wave.hierarchy());
         let mut scope: Vec<_> = scope_name.split('.').map(ToString::to_string).collect();

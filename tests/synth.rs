@@ -29,6 +29,7 @@ fn common_args(output_file: &NamedTempFile) -> Args {
         export_empty: false,
         limit_scope_power: None,
         input_ports_activity: false,
+        stats_chunk_size: 32,
     }
 }
 

@@ -2,7 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use crate::stats::{PackedStats, SignalStats};
-use crate::{Context, indexed_name};
+use crate::{Context, StatsMap, indexed_name};
 use chrono::Utc;
 use indoc::indoc;
 use std::collections::HashMap;
@@ -231,7 +231,12 @@ where
     }
 }
 
-pub fn export<W>(ctx: &Context, mut out: W, iteration: usize) -> std::io::Result<()>
+pub fn export<W>(
+    ctx: &Context,
+    stats: &StatsMap,
+    mut out: W,
+    iteration: usize,
+) -> std::io::Result<()>
 where
     W: std::io::Write,
 {
@@ -294,7 +299,7 @@ where
         power_scope: &ctx.power_scope_prefix,
     };
 
-    let mut agent = SaifAgent::new(&ctx.stats, iteration, 1);
+    let mut agent = SaifAgent::new(stats, iteration, 1);
     agent.visit_hierarchy(ctx.lookup_point, &mut visitor_ctx)?;
 
     write!(out, ")\n")?;

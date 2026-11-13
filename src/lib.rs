@@ -2,6 +2,7 @@
 // SPDX-License-Identifier: Apache-2.0
 
 use std::collections::BTreeSet;
+use std::ops::Range;
 use std::str::FromStr;
 use std::{collections::HashMap, io};
 use std::{fs, hash, path};
@@ -26,6 +27,14 @@ impl hash::Hash for HashVarRef {
     fn hash<H: hash::Hasher>(&self, state: &mut H) {
         self.0.index().hash(state);
     }
+}
+
+type StatsMap = HashMap<HashVarRef, Vec<PackedStats>>;
+
+struct StatInput {
+    var_ref: VarRef,
+    signal_ref: SignalRef,
+    calculate_power: bool,
 }
 
 /// trace2power - Extract acccumulated power activity data from VCD/FST
@@ -88,6 +97,10 @@ pub struct Args {
     /// Set activity for input ports in TCL mode
     #[arg(long)]
     pub input_ports_activity: bool,
+    /// Controls how many clock iterations are processed at one iteration in case
+    /// of per clock cycle outputs. May increase simultaneous memory usage.
+    #[arg(long, default_value_t = 32, value_parser = clap::value_parser!(u64).range(1..))]
+    pub stats_chunk_size: u64,
 }
 
 impl Args {
@@ -154,7 +167,9 @@ impl FromStr for OutputFormat {
 struct Context {
     wave: Waveform,
     clk_period: f64,
-    stats: HashMap<HashVarRef, Vec<PackedStats>>,
+    stat_inputs: Vec<StatInput>,
+    clk_signal: Option<SignalRef>,
+    only_glitches: bool,
     pub num_of_iterations: u64,
     lookup_point: LookupPoint,
     output_fmt: OutputFormat,
@@ -169,6 +184,7 @@ struct Context {
     export_empty: bool,
     power_scope_prefix: String,
     input_ports_activity: bool,
+    stats_chunk_size: u64,
 }
 
 impl Context {
@@ -279,34 +295,18 @@ impl Context {
             1
         };
 
-        // TODO: A massive optimization that can be done here is to calculate stats only
-        // for exported signals instead of all nets
-        // It's easy to do with the current implementation of DFS (see src/exporter/mod.rs).
-        // However it's single-threaded and parallelizing it efficiently is non-trivial.
-        let stats: HashMap<HashVarRef, Vec<stats::PackedStats>> = all_vars
-            .par_iter()
+        let stat_inputs = all_vars
+            .into_iter()
             .zip(all_signals)
-            .map(|(var_ref, sig_ref)| {
-                let fname = indexed_name(
-                    wave.hierarchy()[*var_ref].full_name(wave.hierarchy().into()),
-                    &wave.hierarchy()[*var_ref],
-                );
-                if args.limit_scope_power.is_none() || all_signals_power.contains(&fname) {
-                    return (
-                        HashVarRef(*var_ref),
-                        stats::calc_stats_for_each_time_span(
-                            &wave,
-                            args.only_glitches,
-                            clk_signal,
-                            sig_ref,
-                            num_of_iterations,
-                        ),
-                    );
+            .map(|(var_ref, signal_ref)| {
+                let var = &wave.hierarchy()[var_ref];
+                let fname = indexed_name(var.full_name(wave.hierarchy().into()), var);
+                StatInput {
+                    var_ref,
+                    signal_ref,
+                    calculate_power: args.limit_scope_power.is_none()
+                        || all_signals_power.contains(&fname),
                 }
-                (
-                    HashVarRef(*var_ref),
-                    vec![stats::empty_stats(&wave, sig_ref); num_of_iterations as usize],
-                )
             })
             .collect();
 
@@ -318,7 +318,9 @@ impl Context {
         Self {
             wave,
             clk_period,
-            stats,
+            stat_inputs,
+            clk_signal,
+            only_glitches: args.only_glitches,
             num_of_iterations,
             lookup_point,
             output_fmt: args.output_format,
@@ -341,12 +343,15 @@ impl Context {
                 .clone()
                 .unwrap_or_else(|| lookup_scope_name_prefix),
             input_ports_activity: args.input_ports_activity,
+            stats_chunk_size: args.stats_chunk_size,
         }
     }
 }
 
 pub fn process(args: Args) {
+    println!("Collecting...");
     let ctx = Context::build_from_args(&args);
+    println!("Exporting...");
     if ctx.num_of_iterations > 1 {
         process_trace_iterations(&ctx, args.output);
     } else {
@@ -354,39 +359,68 @@ pub fn process(args: Args) {
     }
 }
 
-fn process_trace(ctx: &Context, out: impl io::Write, iteration: usize) {
+fn process_trace(ctx: &Context, stats: &StatsMap, out: impl io::Write, iteration: usize) {
     match &ctx.output_fmt {
-        OutputFormat::Tcl => exporters::tcl::export(&ctx, out, iteration),
-        OutputFormat::Saif => exporters::saif::export(&ctx, out, iteration),
+        OutputFormat::Tcl => exporters::tcl::export(ctx, stats, out, iteration),
+        OutputFormat::Saif => exporters::saif::export(ctx, stats, out, iteration),
     }
     .expect("Output format should be either 'tcl' or 'saif'")
 }
 
-fn process_trace_iterations(ctx: &Context, output_path: Option<path::PathBuf>) {
-    if let Some(mut path) = output_path {
-        // TODO: multithreading can also be introduced here to process each iteration in parallel
-        for iteration in 0..ctx.num_of_iterations as usize {
-            path.push(format!("{:05}", iteration));
-            let f = fs::File::create(&path).expect("Created file should be valid");
-            let writer = io::BufWriter::new(f);
-            process_trace(&ctx, writer, iteration);
-            path.pop();
-        }
-    } else {
-        for iteration in 0..ctx.num_of_iterations as usize {
-            println!("{1} Iteration {:05} {1}", iteration, str::repeat("-", 10));
-            process_trace(&ctx, io::stdout(), iteration);
+fn process_trace_iterations(ctx: &Context, mut output_path: Option<path::PathBuf>) {
+    // TODO: multithreading can also be introduced here to process each iteration in parallel
+    for chunk_start in (0..ctx.num_of_iterations).step_by(ctx.stats_chunk_size as usize) {
+        let chunk_end = (chunk_start + ctx.stats_chunk_size).min(ctx.num_of_iterations);
+        let stats = calculate_stats_chunk(ctx, chunk_start..chunk_end);
+
+        for iteration in chunk_start..chunk_end {
+            let local_iteration = (iteration - chunk_start) as usize;
+            if let Some(path) = output_path.as_mut() {
+                path.push(format!("{:05}", iteration));
+                let f = fs::File::create(&path).expect("Created file should be valid");
+                let writer = io::BufWriter::new(f);
+                process_trace(ctx, &stats, writer, local_iteration);
+                path.pop();
+            } else {
+                println!("{1} Iteration {:05} {1}", iteration, str::repeat("-", 10));
+                process_trace(ctx, &stats, io::stdout(), local_iteration);
+            }
         }
     }
 }
 
+fn calculate_stats_chunk(ctx: &Context, iterations: Range<u64>) -> StatsMap {
+    let num_of_iterations = ctx.num_of_iterations;
+    let chunk_len = (iterations.end - iterations.start) as usize;
+
+    ctx.stat_inputs
+        .par_iter()
+        .map(|input| {
+            let stats = if input.calculate_power {
+                stats::calc_stats_for_time_span_range(
+                    &ctx.wave,
+                    ctx.only_glitches,
+                    ctx.clk_signal,
+                    input.signal_ref,
+                    num_of_iterations,
+                    iterations.clone(),
+                )
+            } else {
+                vec![stats::empty_stats(&ctx.wave, input.signal_ref); chunk_len]
+            };
+            (HashVarRef(input.var_ref), stats)
+        })
+        .collect()
+}
+
 fn process_single_iteration_trace(ctx: &Context, output_path: Option<path::PathBuf>) {
+    let stats = calculate_stats_chunk(ctx, 0..1);
     match output_path {
-        None => process_trace(&ctx, io::stdout(), 0),
+        None => process_trace(ctx, &stats, io::stdout(), 0),
         Some(ref path) => {
             let f = fs::File::create(path).expect("Created file should be valid");
             let writer = io::BufWriter::new(f);
-            process_trace(&ctx, writer, 0);
+            process_trace(ctx, &stats, writer, 0);
         }
     }
 }

@@ -29,6 +29,7 @@ fn common_args(output_file: &NamedTempFile) -> Args {
         export_empty: false,
         limit_scope_power: Some(String::from("hierarchical_tb.dut.adder1")),
         input_ports_activity: true,
+        stats_chunk_size: 32,
     }
 }
 

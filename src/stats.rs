@@ -4,6 +4,7 @@
 use itertools::izip;
 use rayon::prelude::*;
 use std::fmt::Debug;
+use std::ops::Range;
 use wellen::{Signal, SignalRef, SignalValue, TimeTableIdx, simple::Waveform};
 
 #[derive(Debug, Clone)]
@@ -77,39 +78,33 @@ fn time_value_at(wave: &Waveform, ti: TimeTableIdx) -> u64 {
     return time_stamp;
 }
 
-pub fn calc_stats_for_each_time_span(
+pub fn calc_stats_for_time_span_range(
     wave: &Waveform,
     glitches_only: bool,
     clk_signal: Option<SignalRef>,
     sig_ref: SignalRef,
     num_of_iterations: u64,
+    iterations: Range<u64>,
 ) -> Vec<PackedStats> {
-    let mut stats = Vec::with_capacity(num_of_iterations as usize);
     let time_span = (*wave
         .time_table()
         .last()
         .expect("Waveform shouldn't be empty"))
         / num_of_iterations;
 
-    stats.extend(
-        (0..num_of_iterations)
-            .into_par_iter()
-            .map(|index| {
-                let first_time_stamp = index * time_span;
-                let last_time_stamp = (index + 1) * time_span;
-                return calc_stats(
-                    wave,
-                    glitches_only,
-                    clk_signal,
-                    sig_ref,
-                    first_time_stamp,
-                    last_time_stamp,
-                );
-            })
-            .collect::<Vec<PackedStats>>(),
-    );
-
-    return stats;
+    iterations
+        .into_par_iter()
+        .map(|index| {
+            calc_stats(
+                wave,
+                glitches_only,
+                clk_signal,
+                sig_ref,
+                index * time_span,
+                (index + 1) * time_span,
+            )
+        })
+        .collect()
 }
 
 pub fn calc_stats(
